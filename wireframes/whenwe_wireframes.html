@@ -1,0 +1,2033 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>우리 언제? · 와이어프레임</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --canvas: #fafafa;
+    --line: #222;
+    --line-soft: #999;
+    --line-dashed: #bbb;
+    --fill: #f0f0f0;
+    --fill-2: #e6e6e6;
+    --fill-3: #d8d8d8;
+    --text: #222;
+    --muted: #666;
+    --sidebar: #f5f5f5;
+    --accent: #222;
+    --note: #888;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  /* ----- Layout ----- */
+  .app {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    min-height: 100vh;
+  }
+  .nav {
+    background: var(--sidebar);
+    border-right: 1px solid var(--line);
+    padding: 24px 16px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .nav h1 {
+    font-size: 16px;
+    margin: 0 0 4px;
+    letter-spacing: -0.5px;
+  }
+  .nav .subtitle {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  .nav .section-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin: 16px 0 8px;
+  }
+  .nav button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+    margin-bottom: 2px;
+    border-radius: 2px;
+    font-family: inherit;
+  }
+  .nav button:hover { background: #eaeaea; }
+  .nav button.active {
+    background: #222;
+    color: #fff;
+  }
+  .nav .num {
+    display: inline-block;
+    width: 22px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .nav button.active .num { color: #ccc; }
+
+  .canvas {
+    padding: 32px 40px 80px;
+    background: var(--canvas);
+    min-height: 100vh;
+  }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  .screen-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px dashed var(--line-dashed);
+  }
+  .screen-header h2 {
+    margin: 0 0 4px;
+    font-size: 20px;
+    letter-spacing: -0.3px;
+  }
+  .screen-header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  /* ----- Wireframe primitives ----- */
+  .frame {
+    background: #fff;
+    border: 2px solid var(--line);
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .frame-label {
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    background: var(--canvas);
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--line);
+    background: #fff;
+  }
+  .logo {
+    border: 1.5px solid var(--line);
+    padding: 4px 10px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .topbar-right { display: flex; gap: 12px; align-items: center; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border: 1.5px solid var(--line);
+    background: #fff;
+    cursor: default;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--text);
+  }
+  .btn.primary {
+    background: var(--line);
+    color: #fff;
+  }
+  .btn.ghost {
+    border-color: var(--line-soft);
+    color: var(--muted);
+  }
+  .btn.sm { padding: 4px 10px; font-size: 12px; }
+  .btn.lg { padding: 12px 24px; font-size: 14px; }
+
+  .input {
+    display: block;
+    width: 100%;
+    border: none;
+    border-bottom: 1.5px solid var(--line);
+    padding: 8px 0;
+    background: transparent;
+    font-size: 13px;
+    color: var(--muted);
+    font-family: inherit;
+  }
+  .input.boxed {
+    border: 1.5px solid var(--line);
+    padding: 10px 12px;
+  }
+  .label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .field { margin-bottom: 20px; }
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .chip {
+    display: inline-block;
+    border: 1px solid var(--line);
+    padding: 4px 12px;
+    font-size: 12px;
+    margin-right: 6px;
+    background: #fff;
+  }
+  .chip.selected { background: var(--line); color: #fff; }
+  .badge {
+    display: inline-block;
+    border: 1px solid var(--line-soft);
+    background: var(--fill);
+    padding: 2px 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .badge.dark { background: var(--line); color: #fff; border-color: var(--line); }
+
+  .placeholder {
+    border: 1px dashed var(--line-dashed);
+    background: repeating-linear-gradient(
+      45deg,
+      #fafafa,
+      #fafafa 6px,
+      #f2f2f2 6px,
+      #f2f2f2 12px
+    );
+    color: var(--note);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    text-align: center;
+    padding: 24px;
+  }
+
+  .note {
+    color: var(--note);
+    font-size: 11px;
+    font-style: italic;
+  }
+  .note-block {
+    background: #fff8dc;
+    border-left: 3px solid #d4b400;
+    padding: 10px 14px;
+    margin: 16px 0;
+    font-size: 12px;
+    color: #6b5a00;
+    border-radius: 2px;
+  }
+  .note-block strong { color: #4d4200; }
+
+  .row { display: flex; gap: 12px; align-items: center; }
+  .gap-sm { gap: 8px; }
+  .gap-lg { gap: 24px; }
+  .mt-sm { margin-top: 8px; }
+  .mt-md { margin-top: 16px; }
+  .mt-lg { margin-top: 32px; }
+  .mb-sm { margin-bottom: 8px; }
+  .mb-md { margin-bottom: 16px; }
+  .mb-lg { margin-bottom: 32px; }
+  .center { text-align: center; }
+
+  /* ===== Screen 1: Landing ===== */
+  .hero {
+    padding: 100px 24px 80px;
+    text-align: center;
+    border-bottom: 1px dashed var(--line-dashed);
+  }
+  .rolling-box {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 12px;
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    margin-bottom: 16px;
+  }
+  .rolling-slot {
+    display: inline-block;
+    border: 1.5px dashed var(--line-dashed);
+    padding: 4px 18px;
+    min-width: 180px;
+    font-size: 32px;
+    color: var(--muted);
+    text-align: center;
+    position: relative;
+  }
+  .rolling-slot::after {
+    content: "↕ 롤링";
+    position: absolute;
+    right: -50px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: var(--note);
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  .subcopy { color: var(--muted); margin-bottom: 36px; font-size: 15px; }
+  .feature-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    padding: 48px 32px;
+  }
+  .feature-card {
+    border: 1px solid var(--line);
+    padding: 24px;
+    text-align: center;
+  }
+  .feature-num {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    border: 1.5px solid var(--line);
+    border-radius: 50%;
+    line-height: 30px;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  /* ===== Screen 2: Auth ===== */
+  .auth-container {
+    padding: 80px 24px;
+    display: flex;
+    justify-content: center;
+  }
+  .auth-card {
+    width: 380px;
+    border: 1.5px solid var(--line);
+    padding: 32px;
+    background: #fff;
+  }
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 28px;
+  }
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    cursor: default;
+    color: var(--muted);
+  }
+  .tab.active {
+    border-bottom: 2px solid var(--line);
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: -1px;
+  }
+
+  /* ===== Screen 3: My Meetings ===== */
+  .page-body {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    min-height: 600px;
+  }
+  .sidepanel {
+    background: #fafafa;
+    border-right: 1px solid var(--line);
+    padding: 24px 16px;
+  }
+  .filter-item {
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: default;
+    border-left: 3px solid transparent;
+    margin-bottom: 2px;
+  }
+  .filter-item.active {
+    border-left-color: var(--line);
+    color: var(--text);
+    background: #fff;
+    font-weight: 600;
+  }
+  .content { padding: 24px; }
+  .content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .meeting-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .meeting-card {
+    border: 1.5px solid var(--line);
+    padding: 16px;
+    background: #fff;
+  }
+  .meeting-card .title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .meeting-card .meta {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+  .meeting-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line-dashed);
+  }
+
+  /* ===== Screen 4: Wizard ===== */
+  .wizard-stepper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 32px 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid var(--line-soft);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    color: var(--muted);
+  }
+  .step.active .step-num {
+    background: var(--line);
+    color: #fff;
+    border-color: var(--line);
+  }
+  .step.active { color: var(--text); font-weight: 600; }
+  .step.done .step-num {
+    background: #fff;
+    border-color: var(--line);
+    color: var(--line);
+  }
+  .step.done { color: var(--text); }
+  .step-line {
+    width: 60px;
+    height: 1px;
+    background: var(--line-dashed);
+    margin: 0 8px;
+  }
+  .wizard-body {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+  .wizard-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-top: 1px solid var(--line);
+    background: #fafafa;
+  }
+  .wizard-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px dashed var(--line-dashed);
+  }
+  .wizard-tab {
+    padding: 6px 12px;
+    border: 1px solid var(--line-soft);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    border-radius: 2px;
+  }
+  .wizard-tab.active {
+    background: var(--line);
+    color: #fff;
+    border-color: var(--line);
+  }
+
+  /* Calendar mini */
+  .mini-cal {
+    border: 1px solid var(--line);
+    padding: 12px;
+    background: #fff;
+  }
+  .mini-cal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+  .mini-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    font-size: 11px;
+  }
+  .mini-cal-grid div {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #eee;
+    color: var(--muted);
+  }
+  .mini-cal-grid .head {
+    border: none;
+    color: var(--line-soft);
+    font-size: 10px;
+  }
+  .mini-cal-grid .range {
+    background: var(--fill);
+    border-color: var(--line-soft);
+    color: var(--text);
+  }
+  .mini-cal-grid .start, .mini-cal-grid .end {
+    background: var(--line);
+    color: #fff;
+    border-color: var(--line);
+    font-weight: 600;
+  }
+
+  /* ===== Screen 5: Invite ===== */
+  .invite-container {
+    padding: 60px 24px;
+    display: flex;
+    justify-content: center;
+  }
+  .invite-card {
+    width: 480px;
+    border: 1.5px solid var(--line);
+    padding: 32px;
+    background: #fff;
+  }
+  .meeting-info-box {
+    background: #fafafa;
+    border: 1px dashed var(--line-dashed);
+    padding: 16px;
+    margin-bottom: 24px;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 13px;
+    border-bottom: 1px dotted #ddd;
+  }
+  .info-row:last-child { border: none; }
+  .info-row .k { color: var(--muted); }
+
+  /* ===== Screen 6: Time selection ===== */
+  .time-page {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    min-height: 700px;
+  }
+  .time-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+  }
+  .mode-toggle {
+    display: inline-flex;
+    border: 1.5px solid var(--line);
+    border-radius: 0;
+    overflow: hidden;
+  }
+  .mode-toggle button {
+    border: none;
+    background: #fff;
+    padding: 8px 16px;
+    font-size: 12px;
+    cursor: default;
+    border-right: 1px solid var(--line);
+    font-family: inherit;
+  }
+  .mode-toggle button:last-child { border-right: none; }
+  .mode-toggle button.active {
+    background: var(--line);
+    color: #fff;
+  }
+  .quick-actions {
+    padding: 14px 24px;
+    background: #fafafa;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .slot-grid-wrap {
+    padding: 20px 24px;
+    overflow-x: auto;
+  }
+  .slot-grid {
+    display: grid;
+    grid-template-columns: 60px repeat(7, 1fr);
+    gap: 4px;
+    min-width: 700px;
+  }
+  .slot-grid .corner { background: transparent; }
+  .slot-grid .day-head {
+    border: 1px solid var(--line);
+    padding: 8px;
+    text-align: center;
+    background: #fff;
+    font-size: 11px;
+  }
+  .slot-grid .day-head .date { font-size: 14px; font-weight: 600; }
+  .slot-grid .time-label {
+    padding: 8px 4px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: right;
+  }
+  .slot {
+    border: 1px solid #ddd;
+    background: #fff;
+    aspect-ratio: 1 / 0.7;
+    cursor: default;
+    position: relative;
+  }
+  .slot.available {
+    background: var(--line);
+    border-color: var(--line);
+  }
+  .slot.maybe {
+    background: var(--fill-2);
+    border-color: var(--line-soft);
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 4px,
+      rgba(0,0,0,0.15) 4px,
+      rgba(0,0,0,0.15) 5px
+    );
+  }
+  .slot.unavailable {
+    background: #fff;
+    border-color: #ddd;
+    background-image: linear-gradient(
+      to top right,
+      transparent 48%,
+      #ccc 48%,
+      #ccc 52%,
+      transparent 52%
+    );
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-right: 4px;
+    vertical-align: middle;
+    border: 1px solid #ccc;
+  }
+  .legend-swatch.available { background: var(--line); border-color: var(--line); }
+  .legend-swatch.maybe {
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.3) 3px, rgba(0,0,0,0.3) 4px);
+    background-color: var(--fill-2);
+  }
+
+  .sticky-cta {
+    padding: 16px 24px;
+    border-top: 1px solid var(--line);
+    background: #fff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    bottom: 0;
+  }
+
+  /* ===== Screen 7: Recommendation ===== */
+  .reco-page {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    min-height: 700px;
+  }
+  .reco-left {
+    border-right: 1px solid var(--line);
+    padding: 20px;
+    background: #fff;
+  }
+  .reco-card {
+    border: 1.5px solid var(--line);
+    padding: 16px;
+    margin-bottom: 12px;
+    background: #fff;
+    position: relative;
+  }
+  .reco-card.rank-1 { border-width: 2px; box-shadow: 4px 4px 0 var(--line); }
+  .rank-badge {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border: 1.5px solid var(--line);
+    border-radius: 50%;
+    text-align: center;
+    line-height: 22px;
+    font-weight: 700;
+    margin-right: 8px;
+    background: #fff;
+  }
+  .reco-card.rank-1 .rank-badge { background: var(--line); color: #fff; }
+  .reco-time { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .reco-counts {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+  .count-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: var(--fill);
+    border: 1px solid var(--line-soft);
+  }
+  .reco-right { padding: 20px; }
+
+  .matrix {
+    border: 1px solid var(--line);
+    background: #fff;
+    overflow-x: auto;
+  }
+  .matrix table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .matrix th, .matrix td {
+    border: 1px solid #eee;
+    padding: 6px 4px;
+    text-align: center;
+  }
+  .matrix th {
+    background: #fafafa;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .matrix .pname {
+    text-align: left;
+    padding-left: 10px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .matrix .cell-a { background: var(--line); color: #fff; }
+  .matrix .cell-m {
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,0.2) 3px, rgba(0,0,0,0.2) 4px);
+    background-color: var(--fill-2);
+  }
+  .matrix .cell-u { color: #bbb; }
+  .matrix .required {
+    background: #fff8dc;
+    font-weight: 600;
+  }
+
+  /* ===== Screen 8: Summary ===== */
+  .summary-container {
+    padding: 48px 24px;
+    display: flex;
+    justify-content: center;
+  }
+  .summary-card {
+    width: 560px;
+    border: 2px solid var(--line);
+    padding: 0;
+    background: #fff;
+  }
+  .summary-check {
+    text-align: center;
+    padding: 32px 24px 24px;
+    border-bottom: 1px dashed var(--line-dashed);
+  }
+  .check-circle {
+    width: 56px;
+    height: 56px;
+    border: 2px solid var(--line);
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    font-size: 24px;
+  }
+  .confirmed-time {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin: 8px 0 4px;
+  }
+  .summary-body { padding: 24px; }
+  .participant-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .summary-actions {
+    padding: 20px 24px;
+    border-top: 1px solid var(--line);
+    background: #fafafa;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .action-group-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--muted);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .action-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .action-btn {
+    border: 1.5px solid var(--line);
+    background: #fff;
+    padding: 14px 16px;
+    text-align: left;
+    cursor: default;
+    font-family: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: none;
+  }
+  .action-btn.primary-action {
+    background: var(--line);
+    color: #fff;
+    border-color: var(--line);
+  }
+  .action-btn.future {
+    border-style: dashed;
+    border-color: var(--line-soft);
+    background: transparent;
+  }
+  .action-btn.future .action-main { color: var(--muted); }
+  .action-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .action-sub {
+    font-size: 11px;
+    opacity: 0.75;
+    font-weight: 400;
+  }
+  .action-btn.primary-action .action-sub { opacity: 0.7; }
+  .phase-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    border-radius: 0;
+    border: 1px solid;
+    font-family: inherit;
+  }
+  .phase-1 {
+    background: var(--line);
+    color: #fff;
+    border-color: var(--line);
+  }
+  .action-btn.primary-action .phase-1 {
+    background: #fff;
+    color: var(--line);
+    border-color: #fff;
+  }
+  .phase-2 {
+    background: #fff;
+    color: var(--muted);
+    border-color: var(--line-soft);
+    border-style: dashed;
+  }
+  .phase-3 {
+    background: #fff;
+    color: var(--note);
+    border-color: var(--line-dashed);
+    border-style: dashed;
+  }
+
+  /* ===== Wizard step previews (Step 5 - participants table) ===== */
+  .participant-row {
+    display: grid;
+    grid-template-columns: 30px 1fr 80px 80px;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+  }
+  .participant-row:last-child { border: none; }
+  .avatar-circle {
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--line-soft);
+    border-radius: 50%;
+    background: var(--fill);
+  }
+  .checkbox {
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--line);
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .checkbox.checked {
+    background: var(--line);
+    position: relative;
+  }
+  .checkbox.checked::after {
+    content: "✓";
+    color: #fff;
+    font-size: 11px;
+    position: absolute;
+    top: -3px;
+    left: 2px;
+  }
+  .copy-box {
+    display: flex;
+    align-items: center;
+    border: 1.5px solid var(--line);
+    padding: 0;
+    background: var(--fill);
+  }
+  .copy-box .url {
+    flex: 1;
+    padding: 10px 12px;
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .copy-box .copy-btn {
+    background: var(--line);
+    color: #fff;
+    padding: 10px 16px;
+    font-size: 12px;
+    border: none;
+    cursor: default;
+    font-family: inherit;
+  }
+
+  /* time range slider mock */
+  .range-mock {
+    height: 8px;
+    background: var(--fill);
+    position: relative;
+    margin: 24px 0 12px;
+  }
+  .range-mock .track {
+    position: absolute;
+    top: 0;
+    left: 30%;
+    right: 15%;
+    height: 100%;
+    background: var(--line);
+  }
+  .range-mock .handle {
+    position: absolute;
+    top: -6px;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--line);
+    background: #fff;
+    border-radius: 50%;
+  }
+  .range-mock .handle.start { left: calc(30% - 9px); }
+  .range-mock .handle.end { left: calc(85% - 9px); }
+  .range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* Annotations */
+  .annot {
+    position: relative;
+    padding-left: 14px;
+    color: var(--note);
+    font-size: 11px;
+    font-style: italic;
+  }
+  .annot::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+  }
+  .annot-list {
+    margin-top: 16px;
+    padding: 12px 16px;
+    background: #fff;
+    border: 1px dashed var(--line-dashed);
+  }
+  .annot-list .title {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .annot-list ul {
+    margin: 0;
+    padding-left: 16px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .annot-list li { margin-bottom: 3px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <aside class="nav">
+    <h1>우리 언제?</h1>
+    <div class="subtitle">Wireframes v0.1 · Desktop · Lo-fi</div>
+
+    <div class="section-label">사용자 플로우</div>
+    <button class="nav-btn active" data-screen="s1"><span class="num">01</span>랜딩 / 스플래시</button>
+    <button class="nav-btn" data-screen="s2"><span class="num">02</span>로그인 / 회원가입</button>
+    <button class="nav-btn" data-screen="s3"><span class="num">03</span>내 모임 목록</button>
+    <button class="nav-btn" data-screen="s4"><span class="num">04</span>모임 생성 Wizard</button>
+
+    <div class="section-label">참여자 플로우</div>
+    <button class="nav-btn" data-screen="s5"><span class="num">05</span>초대 참여</button>
+    <button class="nav-btn" data-screen="s6"><span class="num">06</span>가능 시간 선택</button>
+
+    <div class="section-label">결과 / 확정</div>
+    <button class="nav-btn" data-screen="s7"><span class="num">07</span>추천 결과</button>
+    <button class="nav-btn" data-screen="s8"><span class="num">08</span>최종 요약</button>
+
+    <div class="section-label">참고</div>
+    <div style="font-size: 11px; color: var(--muted); padding: 8px 10px; line-height: 1.5;">
+      좌측 네비를 눌러<br/>각 화면을 전환합니다.<br/><br/>
+      모든 박스/라인은<br/>로우파이 와이어<br/>프레임 표현입니다.
+    </div>
+  </aside>
+
+  <main class="canvas">
+
+    <!-- =================== SCREEN 1 =================== -->
+    <section class="screen active" id="s1">
+      <div class="screen-header">
+        <h2>01 · 랜딩 / 스플래시 페이지</h2>
+        <p>첫 진입 시 브랜드 카피 롤링 모션 노출 → CTA로 모임 생성 유도</p>
+      </div>
+      <div class="frame">
+        <div class="frame-label">DESKTOP · 1200 × auto</div>
+
+        <div class="topbar">
+          <div class="logo">우리 언제?</div>
+          <div class="topbar-right">
+            <span class="note">서비스 소개</span>
+            <button class="btn sm">로그인</button>
+            <button class="btn sm primary">회원가입</button>
+          </div>
+        </div>
+
+        <div class="hero">
+          <div class="rolling-box">
+            <span>우리 언제</span>
+            <span class="rolling-slot">만날까?</span>
+          </div>
+          <div class="subcopy">모두의 가능한 시간을 모아, 가장 잘 맞는 시간을 찾아주는 모임 조율 서비스</div>
+          <button class="btn primary lg">모임 만들기 →</button>
+          <div class="note mt-md">로그인 없이도 만들기 시작 가능 · 결과 저장은 로그인 필요</div>
+        </div>
+
+        <div class="feature-row">
+          <div class="feature-card">
+            <div class="feature-num">1</div>
+            <div style="font-weight:600;margin-bottom:6px;">조율 기간 설정</div>
+            <div class="note" style="font-style:normal;">모임장이 기간과 예상 소요 시간만 입력</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-num">2</div>
+            <div style="font-weight:600;margin-bottom:6px;">참여자가 가능 시간 제출</div>
+            <div class="note" style="font-style:normal;">링크 공유 → 가능/애매/불가 선택</div>
+          </div>
+          <div class="feature-card">
+            <div class="feature-num">3</div>
+            <div style="font-weight:600;margin-bottom:6px;">TOP 5 추천 시간</div>
+            <div class="note" style="font-style:normal;">가장 많이 겹치는 시간을 자동 계산</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="annot-list">
+        <div class="title">화면 메모</div>
+        <ul>
+          <li>롤링 슬롯: "만날까?" → "떠나지?" → "회의해?" → "모일까?" 세로 롤링, 마지막에 "우리 언제?"만 남음</li>
+          <li>모션은 과하지 않게, 첫 진입 후 CTA가 fold 안에 보이도록</li>
+          <li>로그인하지 않은 상태에서도 "모임 만들기" 클릭 가능 → 로그인 페이지로 이동 후 복귀</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- =================== SCREEN 2 =================== -->
+    <section class="screen" id="s2">
+      <div class="screen-header">
+        <h2>02 · 로그인 / 회원가입</h2>
+        <p>모임장은 로그인 사용자만 가능 · 이메일 기반 단순 인증</p>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label">DESKTOP · 중앙 카드</div>
+        <div class="topbar">
+          <div class="logo">우리 언제?</div>
+          <div class="topbar-right">
+            <button class="btn ghost sm">홈으로</button>
+          </div>
+        </div>
+
+        <div class="auth-container">
+          <div class="auth-card">
+            <div class="tabs">
+              <div class="tab active">로그인</div>
+              <div class="tab">회원가입</div>
+            </div>
+
+            <div class="field">
+              <span class="label">이메일</span>
+              <input class="input" placeholder="example@whenwe.app" disabled>
+            </div>
+            <div class="field">
+              <span class="label">비밀번호</span>
+              <input class="input" placeholder="••••••••" disabled>
+            </div>
+
+            <button class="btn primary lg" style="width:100%;justify-content:center;">로그인</button>
+
+            <div class="center mt-md note">아직 계정이 없으신가요? &nbsp;<u>회원가입</u></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="annot-list">
+        <div class="title">화면 메모</div>
+        <ul>
+          <li>로그인 / 회원가입 탭으로 한 화면에서 전환</li>
+          <li>회원가입 탭에서는 닉네임 입력 필드 추가</li>
+          <li>POST /api/auth/login · POST /api/auth/signup</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- =================== SCREEN 3 =================== -->
+    <section class="screen" id="s3">
+      <div class="screen-header">
+        <h2>03 · 내 모임 목록</h2>
+        <p>로그인 후 진입하는 홈 · 내가 만든 모임을 상태별로 확인</p>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label">DESKTOP · 사이드 필터 + 카드 그리드</div>
+        <div class="topbar">
+          <div class="logo">우리 언제?</div>
+          <div class="topbar-right">
+            <span class="note">소미 님</span>
+            <div class="avatar-circle"></div>
+            <button class="btn ghost sm">로그아웃</button>
+          </div>
+        </div>
+
+        <div class="page-body">
+          <div class="sidepanel">
+            <div class="section-label" style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">필터</div>
+            <div class="filter-item active">전체 (8)</div>
+            <div class="filter-item">진행 중 (3)</div>
+            <div class="filter-item">확정 필요 (1)</div>
+            <div class="filter-item">확정됨 (3)</div>
+            <div class="filter-item">종료됨 (1)</div>
+          </div>
+
+          <div class="content">
+            <div class="content-header">
+              <div>
+                <div style="font-size:16px;font-weight:600;">내 모임</div>
+                <div class="note">진행 중인 모임을 한 곳에서 관리하세요</div>
+              </div>
+              <button class="btn primary">＋ 새 모임 만들기</button>
+            </div>
+
+            <div class="meeting-grid">
+              <div class="meeting-card">
+                <div class="row" style="justify-content:space-between;">
+                  <span class="badge dark">진행 중</span>
+                  <span class="note">친구</span>
+                </div>
+                <div class="title mt-sm">6월 전시 모임</div>
+                <div class="meta">📅 6/1 ~ 6/14 · 2시간</div>
+                <div class="meta">👥 참여 4/5명</div>
+                <div class="meeting-card-footer">
+                  <span class="note">마감 D-2</span>
+                  <button class="btn sm">관리 →</button>
+                </div>
+              </div>
+
+              <div class="meeting-card">
+                <div class="row" style="justify-content:space-between;">
+                  <span class="badge" style="border-color:#d4b400;color:#6b5a00;background:#fff8dc;">확정 필요</span>
+                  <span class="note">스터디</span>
+                </div>
+                <div class="title mt-sm">알고리즘 스터디 첫 모임</div>
+                <div class="meta">📅 5/25 ~ 5/31 · 3시간</div>
+                <div class="meta">👥 참여 6/6명</div>
+                <div class="meeting-card-footer">
+                  <span class="note">응답 마감 완료</span>
+                  <button class="btn sm primary">확정하기 →</button>
+                </div>
+              </div>
+
+              <div class="meeting-card">
+                <div class="row" style="justify-content:space-between;">
+                  <span class="badge">확정됨</span>
+                  <span class="note">비즈니스</span>
+                </div>
+                <div class="title mt-sm">사이드프로젝트 킥오프</div>
+                <div class="meta">✓ 5/28 (수) 20:00 ~ 22:00</div>
+                <div class="meta">👥 참여 3명</div>
+                <div class="meeting-card-footer">
+                  <span class="note">캘린더 등록 완료</span>
+                  <button class="btn sm">요약 보기</button>
+                </div>
+              </div>
+
+              <div class="meeting-card placeholder" style="min-height:160px;">+ 모임 카드 (반복)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="annot-list">
+        <div class="title">화면 메모</div>
+        <ul>
+          <li>모임 상태: DRAFT / COLLECTING / READY_TO_CONFIRM / CONFIRMED / CLOSED → 5가지 배지로 표현</li>
+          <li>"확정 필요" 상태는 강조 배지(노란색)로 우선순위 부각</li>
+          <li>참여 인원 표시(응답/전체)로 응답 진행률 가시화</li>
+          <li>모임 카드 클릭 → 모임 관리 페이지(추천 결과 화면)로 이동</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- =================== SCREEN 4 =================== -->
+    <section class="screen" id="s4">
+      <div class="screen-header">
+        <h2>04 · 모임 생성 Wizard (5단계)</h2>
+        <p>한 화면에 모든 입력을 넣지 않고 단계형으로 분리 · 상단 탭으로 5단계 미리보기</p>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label">DESKTOP · Stepper + Form</div>
+        <div class="topbar">
+          <div class="logo">우리 언제?</div>
+          <div class="topbar-right">
+            <span class="note">새 모임 만들기</span>
+            <button class="btn ghost sm">× 취소</button>
+          </div>
+        </div>
+
+        <div class="wizard-stepper">
+          <div class="step active"><div class="step-num">1</div>기본 정보</div>
+          <div class="step-line"></div>
+          <div class="step"><div class="step-num">2</div>조율 기간</div>
+          <div class="step-line"></div>
+          <div class="step"><div class="step-num">3</div>시간 설정</div>
+          <div class="step-line"></div>
+          <div class="step"><div class="step-num">4</div>초대 링크</div>
+          <div class="step-line"></div>
+          <div class="step"><div class="step-num">5</div>필수 참석자</div>
+        </div>
+
+        <div class="wizard-body">
+
+          <!-- 와이어프레임 미리보기용: 5단계 모두 토글로 보여줌 -->
+          <div class="wizard-tabs">
+            <span class="note" style="margin-right:8px;">↓ 미리보기:</span>
+            <div class="wizard-tab active" onclick="showWizard('w1')">Step 1</div>
+            <div class="wizard-tab" onclick="showWizard('w2')">Step 2</div>
+            <div class="wizard-tab" onclick="showWizard('w3')">Step 3</div>
+            <div class="wizard-tab" onclick="showWizard('w4')">Step 4</div>
+            <div class="wizard-tab" onclick="showWizard('w5')">Step 5</div>
+          </div>
+
+          <!-- Step 1 -->
+          <div class="wizard-step" id="w1">
+            <div class="field">
+              <span class="label">모임명 *</span>
+              <input class="input" placeholder="예) 6월 전시 모임" disabled>
+            </div>
+            <div class="field">
+              <span class="label">설명 (선택)</span>
+              <input class="input" placeholder="모임에 대한 간단한 설명을 적어주세요" disabled>
+            </div>
+            <div class="field">
+              <span class="label">모임 성격</span>
+              <div>
+                <span class="chip selected">친구</span>
+                <span class="chip">스터디</span>
+                <span class="chip">비즈니스</span>
+              </div>
+              <div class="note mt-sm">성격에 따라 추후 템플릿 / 권한 정책이 달라질 수 있음</div>
+            </div>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="wizard-step" id="w2" style="display:none;">
+            <div class="field">
+              <span class="label">조율 기간 (최대 14일)</span>
+              <div class="row gap-lg">
+                <div style="flex:1;">
+                  <div class="mini-cal">
+                    <div class="mini-cal-head">
+                      <span>‹</span><strong>2026.06</strong><span>›</span>
+                    </div>
+                    <div class="mini-cal-grid">
+                      <div class="head">일</div><div class="head">월</div><div class="head">화</div><div class="head">수</div><div class="head">목</div><div class="head">금</div><div class="head">토</div>
+                      <div></div><div class="start">1</div><div class="range">2</div><div class="range">3</div><div class="range">4</div><div class="range">5</div><div class="range">6</div>
+                      <div class="range">7</div><div class="range">8</div><div class="range">9</div><div class="range">10</div><div class="range">11</div><div class="range">12</div><div class="range">13</div>
+                      <div class="end">14</div><div>15</div><div>16</div><div>17</div><div>18</div><div>19</div><div>20</div>
+                      <div>21</div><div>22</div><div>23</div><div>24</div><div>25</div><div>26</div><div>27</div>
+                      <div>28</div><div>29</div><div>30</div><div></div><div></div><div></div><div></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="flex:1;">
+                  <div class="info-row"><span class="k">시작일</span><strong>2026.06.01 (월)</strong></div>
+                  <div class="info-row"><span class="k">종료일</span><strong>2026.06.14 (일)</strong></div>
+                  <div class="info-row"><span class="k">기간</span><strong>14일</strong></div>
+                  <div class="note mt-md">MVP는 14일까지 제한 · 슬롯 수 폭주 방지</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="wizard-step" id="w3" style="display:none;">
+            <div class="field">
+              <span class="label">선택 가능한 시간대</span>
+              <div class="range-mock">
+                <div class="track"></div>
+                <div class="handle start"></div>
+                <div class="handle end"></div>
+              </div>
+              <div class="range-labels">
+                <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+              </div>
+              <div class="note mt-sm">현재 선택: <strong style="color:var(--text);">18:00 ~ 23:00</strong></div>
+            </div>
+
+            <div class="field-row">
+              <div class="field">
+                <span class="label">예상 소요 시간</span>
+                <input class="input boxed" value="2시간" disabled>
+              </div>
+              <div class="field">
+                <span class="label">시간 슬롯 단위</span>
+                <input class="input boxed" value="1시간 (고정)" disabled>
+              </div>
+            </div>
+
+            <div class="field">
+              <span class="label">응답 마감일</span>
+              <input class="input boxed" value="2026.05.30 23:59" disabled>
+              <div class="note mt-sm">마감일 이후 자동으로 '확정 필요' 상태로 전환됨</div>
+            </div>
+          </div>
+
+          <!-- Step 4 -->
+          <div class="wizard-step" id="w4" style="display:none;">
+            <div class="center mb-lg">
+              <div style="font-size:18px;font-weight:600;">✓ 모임이 생성되었습니다</div>
+              <div class="note">아래 링크를 단톡방이나 메신저에 공유하세요</div>
+            </div>
+
+            <div class="field">
+              <span class="label">초대 링크</span>
+              <div class="copy-box">
+                <div class="url">https://whenwe.app/invite/abc-123-def-456</div>
+                <button class="copy-btn">복사</button>
+              </div>
+              <div class="note mt-sm">링크는 응답 마감일까지 유효합니다 · 재발급 시 기존 링크는 비활성화</div>
+            </div>
+
+            <div class="row gap-lg mt-lg">
+              <button class="btn" style="flex:1;justify-content:center;">📷 QR 코드</button>
+              <button class="btn" style="flex:1;justify-content:center;">💬 카카오톡 공유</button>
+              <button class="btn" style="flex:1;justify-content:center;">📨 메일로 보내기</button>
+            </div>
+
+            <div class="note-block">
+              <strong>참고</strong> · 참여자는 로그인 없이 닉네임만 입력하고 가능 시간을 제출할 수 있습니다.
+            </div>
+          </div>
+
+          <!-- Step 5 -->
+          <div class="wizard-step" id="w5" style="display:none;">
+            <div class="mb-md">
+              <div style="font-weight:600;margin-bottom:4px;">필수 참석자 지정</div>
+              <div class="note">반드시 와야 하는 사람을 체크하세요. 추천 결과에 가중치가 적용됩니다.</div>
+            </div>
+
+            <div style="border:1px solid var(--line);background:#fff;">
+              <div class="participant-row" style="background:#fafafa;border-bottom:1px solid var(--line);">
+                <div></div>
+                <div class="note" style="font-style:normal;">참여자</div>
+                <div class="note" style="font-style:normal;">응답</div>
+                <div class="note" style="font-style:normal;">필수</div>
+              </div>
+              <div class="participant-row">
+                <div class="avatar-circle"></div>
+                <div>소미 <span class="badge" style="margin-left:4px;font-size:10px;">모임장</span></div>
+                <div class="badge dark" style="font-size:10px;">완료</div>
+                <div><span class="checkbox checked"></span></div>
+              </div>
+              <div class="participant-row">
+                <div class="avatar-circle"></div>
+                <div>지원</div>
+                <div class="badge dark" style="font-size:10px;">완료</div>
+                <div><span class="checkbox"></span></div>
+              </div>
+              <div class="participant-row">
+                <div class="avatar-circle"></div>
+                <div>민수 <span class="note" style="font-size:10px;">(생일 당사자)</span></div>
+                <div class="badge dark" style="font-size:10px;">완료</div>
+                <div><span class="checkbox checked"></span></div>
+              </div>
+              <div class="participant-row">
+                <div class="avatar-circle"></div>
+                <div>현주</div>
+                <div class="badge" style="font-size:10px;">대기</div>
+                <div><span class="checkbox"></span></div>
+              </div>
+            </div>
+            <div class="note mt-md">※ 필수 참석자는 응답이 들어온 뒤 수시로 변경할 수 있습니다.</div>
+          </div>
+
+        </div>
+
+        <div class="wizard-footer">
+          <button class="btn ghost">← 이전</button>
+          <div class="note">Step 1 of 5</div>
+          <button class="btn primary">다음 →</button>
+        </div>
+      </div>
+
+      <div class="annot-list">
+        <div class="title">화면 메모</div>
+        <ul>
+          <li>Step 1~3: 모임장 단독 입력 / Step 4: 링크 생성 → 공유 / Step 5: 응답이 들어온 뒤 진입</li>
+          <li>실제 구현에서는 Step 4까지 완료하면 모임이 COLLECTING 상태로 저장됨 (Step 5는 별도 진입 가능)</li>
+          <li>각 Step별 검증: 응답 마감일은 종료일 이전 / 예상 소요 시간은 일일 가능 시간 이하</li>
+          <li>상단 회색 박스의 "↓ 미리보기" 탭은 와이어프레임 검토 편의용 · 실제 UI 아님</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- =================== SCREEN 5 =================== -->
+    <section class="screen" id="s5">
+      <div class="screen-header">
+        <h2>05 · 초대 참여 페이지</h2>
+        <p>비회원 진입 시 첫 화면 · 모임 정보 확인 + 닉네임 입력 → 참여 시작</p>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label">DESKTOP · 비회원 진입 화면</div>
+        <div class="topbar">
+          <div class="logo">우리 언제?</div>
+          <div class="topbar-right">
+            <span class="note">초대 링크로 입장</span>
+            <button class="btn ghost sm">로그인</button>
+          </div>
+        </div>
+
+        <div class="invite-container">
+          <div class="invite-card">
+            <div class="center mb-md">
+              <div style="font-size:18px;font-weight:600;">📨 모임에 초대받았어요</div>
+              <div class="note">아래 정보를 확인하고 참여를 시작하세요</div>
+            </div>
+
+            <div class="meeting-info-box">
+              <div style="font-size:16px;font-weight:600;margin-bottom:8px;">6월 전시 모임</div>
+              <div class="note mb-sm">6월 초에 전시 보러 갈 사람들 일정 조율</div>
+              <div class="info-row"><span class="k">조율 기간</span><span>2026.06.01 ~ 06.14</span></div>
+              <div class="info-row"><span class="k">예상 소요</span><span>2시간</span></div>
+              <div class="info-row"><span class="k">가능 시간대</span><span>매일 18:00 ~ 23:00</span></div>
+              <div class="info-row"><span class="k">응답 마감</span><span>2026.05.30 23:59</span></div>
+              <div class="info-row"><span class="k">현재 참여자</span><span>3명 응답 중</span></div>
+            </div>
+
+            <div class="field">
+              <span class="label">닉네임</span>
+              <input class="input" placeholder="모임에서 사용할 이름" disabled>
+              <div class="note mt-sm">동일 닉네임도 허용됩니다 · 식별은 내부 토큰으로 관리</div>
+            </div>
+
+            <button class="btn primary lg" style="width:100%;justify-content:center;">참여 시작하기 →</button>
+
+            <div class="center mt-md">
+              <span class="note">이미 응답한 적이 있나요?</span>
+              <a href="#" style="color:var(--text);font-size:12px;">&nbsp;내 응답 불러오기</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="annot-list">
+        <div class="title">화면 메모 · 토큰 상태별 분기</div>
+        <ul>
+          <li><strong>정상</strong>: 위 화면 그대로 노출</li>
+          <li><strong>만료된 링크</strong>: "초대 링크가 만료되었습니다" 안내 화면</li>
+          <li><strong>응답 마감</strong>: "응답 기간이 종료되었습니다" 안내 + 추천 결과 보기 버튼</li>
+          <li><strong>확정 완료</strong>: 최종 요약 페이지로 자동 이동</li>
+          <li><strong>잘못된 토큰</strong>: "존재하지 않는 초대 링크입니다" 안내</li>
+          <li>localStorage에 participant_edit_token이 있으면 "내 응답 불러오기" 링크로 수정 진입</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- =================== SCREEN 6 =================== -->
+    <section class="screen" id="s6">
+      <div class="screen-header">
+        <h2>06 · 가능 시간 선택 페이지</h2>
+        <p>참여자 핵심 화면 · 가능/애매/불가 토글로 슬롯 선택 · 빠른 선택 지원</p>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label">DESKTOP · 그리드 선택 UI</div>
+
+        <div class="time-page">
+          <div class="time-header">
+            <div>
+              <div style="font-weight:600;">6월 전시 모임</div>
+              <div class="note">닉네임: 소미 · 가능 시간을 선택해주세요</div>
+            </div>
+            <div class="row gap-sm">
+              <span class="badge">임시저장됨 2분 전</span>
+              <button class="btn sm ghost">전체 초기화</button>
+            </div>
+          </div>
+
+          <div class="quick-actions">
+            <div class="mode-toggle">
+              <button class="active">● 가능</button>
+              <button>◐ 애매</button>
+              <button>○ 불가</button>
+            </div>
+            <div style="width:1px;height:24px;background:var(--line-dashed);"></div>
+            <span class="note">빠른 선택:</span>
+            <button class="btn sm">평일 저녁 가능</button>
+            <button class="btn sm">주말 오후 가능</button>
+            <div style="flex:1;"></div>
+            <div class="legend">
+              <span><span class="legend-swatch available"></span>가능</span>
+              <span><span class="legend-swatch maybe"></span>애매</span>
+              <span><span class="legend-swatch"></span>불가</span>
+            </div>
+          </div>
+
+          <div class="slot-grid-wrap">
+            <div class="slot-grid" id="slotGrid">
+              <div class="corner"></div>
+              <div class="day-head"><div>월</div><div class="date">6/1</div></div>
+              <div class="day-head"><div>화</div><div class="date">6/2</div></div>
+              <div class="day-head"><div>수</div><div class="date">6/3</div></div>
+              <div class="day-head"><div>목</div><div class="date">6/4</div></div>
+              <div class="day-head"><div>금</div><div class="date">6/5</div></div>
+              <div class="day-head" style="background:#fafafa;"><div style="color:#c33;">토</div><div class="date" style="color:#c33;">6/6</div></div>
+              <div class="day-head" style="background:#fafafa;"><div style="color:#c33;">일</div><div class="date" style="color:#c33;">6/7</div></div>
+
+              <!-- Rows generated below by content -->
+              <div class="time-label">18:00</div>
+              <div class="slot available"></div>
+              <div class="slot"></div>
+              <div class="slot maybe"></div>
+              <div class="slot available"></div>
+              <div class="slot"></div>
+              <div class="slot available"></div>
+              <div class="slot available"></div>
+
+              <div class="time-label">19:00</div>
+              <div class="slot available"></div>
+              <div class="slot available"></div>
+              <div class="slot maybe"></div>
+              <div class="slot available"></div>
+              <div class="slot maybe"></div>
+              <div class="slot available"></div>
+              <div class="slot available"></div>
+
+              <div class="time-label">20:00</div>
+              <div class="slot"></div>
+              <div class="slot available"></div>
+              <div class="slot"></div>
+              <div class="slot available"></div>
+              <div class="slot unavailable"></div>
+              <div class="slot available"></div>
+              <div class="slot available"></div>
+
+              <div class="time-label">21:00</div>
+              <div class="slot"></div>
+              <div class="slot available"></div>
+              <div class="slot"></div>
+              <div class="slot maybe"></div>
+              <div class="slot unavailable"></div>
+              <div class="slot available"></div>
+              <div class="slot"></div>
+
+              <div class="time-label">22:00</div>
+              <div class="slot"></div>
+              <div class="slot"></div>
+              <div class="slot"></div>
+              <div class="slot"></div>
+              <div class="slot unavailable"></div>
+              <div class="slot"></div>
+              <div class="slot"></div>
+            </div>
+
+            <div class="note mt-md center">‹ 6/1 ~ 6/7 · 다음 주 →</div>
+          </div>
+
+          <div class="sticky-cta">
+            <div>
+              <div style="font-size:13px;font-weight:600;">선택 완료: 가능 11 · 애매 4 · 불가 3</div>
+              <div class="note">자동 저장됨 · 응답 마감 전까지 언제든 수정 가능</div>
+            </div>
+            <button class="btn primary lg">제출하기 →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="annot-list">
+        <div class="title">화면 메모 · 인터랙션</div>
+        <ul>
+          <li>모드 토글로 선택 색상 결정 → 슬롯 클릭 시 현재 모드 색상 적용</li>
+          <li>같은 슬롯 다시 클릭하면 선택 해제</li>
+          <li>데스크탑 한정: 드래그 선택 지원 (모바일은 탭 only)</li>
+          <li>응답 마감 후 진입 시 슬롯 비활성화 + "응답 마감되었습니다" 배너 표시</li>
+          <li>날짜 페이지네이션: 14일 전체를 1주 단위로 나눠 좌우 이동 (혹은 가로 스크롤)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- =================== SCREEN 7 =================== -->
+    <section class="screen" id="s7">
+      <div class="screen-header">
+        <h2>07 · 추천 결과 페이지</h2>
+        <p>모임장 핵심 화면 · TOP 5 추천 카드 + 참여자별 응답 매트릭스 · 일정 확정</p>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label">DESKTOP · 좌측 추천 / 우측 매트릭스</div>
+        <div class="topbar">
+          <div class="logo">우리 언제?</div>
+          <div class="topbar-right">
+            <span class="note">6월 전시 모임</span>
+            <span class="badge dark">진행 중</span>
+            <button class="btn ghost sm">설정</button>
+          </div>
+        </div>
+
+        <div class="reco-page">
+          <div class="reco-left">
+            <div class="row" style="justify-content:space-between;margin-bottom:16px;">
+              <div>
+                <div style="font-weight:600;">추천 시간 TOP 5</div>
+                <div class="note">참여자 5/5명 응답 완료</div>
+              </div>
+              <button class="btn sm ghost">⟳ 새로고침</button>
+            </div>
+
+            <div class="reco-card rank-1">
+              <div class="row" style="justify-content:space-between;align-items:flex-start;">
+                <div>
+                  <div><span class="rank-badge">1</span><strong>6월 8일 (토) 14:00 ~ 16:00</strong></div>
+                </div>
+                <span class="badge dark" style="font-size:10px;">⭐ 추천</span>
+              </div>
+              <div class="reco-counts mt-md">
+                <span class="count-pill">● 가능 5</span>
+                <span class="count-pill">◐ 애매 1</span>
+                <span class="count-pill">○ 불가 0</span>
+              </div>
+              <div class="row" style="justify-content:space-between;">
+                <span class="note">필수 참석자 전원 가능 ✓</span>
+                <button class="btn sm primary">이 시간으로 확정</button>
+              </div>
+            </div>
+
+            <div class="reco-card">
+              <div><span class="rank-badge">2</span><strong>6월 6일 (목) 19:00 ~ 21:00</strong></div>
+              <div class="reco-counts mt-md">
+                <span class="count-pill">● 가능 4</span>
+                <span class="count-pill">◐ 애매 2</span>
+                <span class="count-pill">○ 불가 0</span>
+              </div>
+              <div class="row" style="justify-content:space-between;">
+                <span class="note">필수 참석자 전원 가능 ✓</span>
+                <button class="btn sm">선택</button>
+              </div>
+            </div>
+
+            <div class="reco-card">
+              <div><span class="rank-badge">3</span><strong>6월 10일 (월) 20:00 ~ 22:00</strong></div>
+              <div class="reco-counts mt-md">
+                <span class="count-pill">● 가능 4</span>
+                <span class="count-pill">◐ 애매 1</span>
+                <span class="count-pill">○ 불가 1</span>
+              </div>
+              <div class="row" style="justify-content:space-between;">
+                <span class="note" style="color:#c33;">필수 참석자 1명 불가</span>
+                <button class="btn sm">선택</button>
+              </div>
+            </div>
+
+            <div class="reco-card">
+              <div><span class="rank-badge">4</span><strong>6월 12일 (수) 18:00 ~ 20:00</strong></div>
+              <div class="reco-counts mt-md">
+                <span class="count-pill">● 가능 3</span>
+                <span class="count-pill">◐ 애매 2</span>
+                <span class="count-pill">○ 불가 1</span>
+              </div>
+            </div>
+
+            <div class="reco-card">
+              <div><span class="rank-badge">5</span><strong>6월 14일 (일) 15:00 ~ 17:00</strong></div>
+              <div class="reco-counts mt-md">
+                <span class="count-pill">● 가능 3</span>
+                <span class="count-pill">◐ 애매 1</span>
+                <span class="count-pill">○ 불가 2</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="reco-right">
+            <div class="row" style="justify-content:space-between;margin-bottom:12px;">
+              <div>
+                <div style="font-weight:600;">참여자별 응답 현황</div>
+                <div class="note">필수 참석자를 체크하면 추천이 재계산됩니다</div>
+              </div>
+              <button class="btn sm ghost">CSV 내보내기</button>
+            </div>
+
+            <div class="matrix">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="text-align:left;padding-left:10px;">참여자 · 필수</th>
+                    <th>6/1<br/><span class="note">월</span></th>
+                    <th>6/3<br/><span class="note">수</span></th>
+                    <th>6/6<br/><span class="note">토</span></th>
+                    <th>6/8<br/><span class="note">토</span></th>
+                    <th>6/10<br/><span class="note">월</span></th>
+                    <th>6/12<br/><span class="note">수</span></th>
+                    <th>6/14<br/><span class="note">일</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="pname required"><span class="checkbox checked"></span> 소미 (모임장)</td>
+                    <td class="cell-a">가</td><td class="cell-m">애</td><td class="cell-a">가</td>
+                    <td class="cell-a">가</td><td class="cell-a">가</td><td class="cell-m">애</td><td class="cell-a">가</td>
+                  </tr>
+                  <tr>
+                    <td class="pname">지원</td>
+                    <td class="cell-u">불</td><td class="cell-a">가</td><td class="cell-a">가</td>
+                    <td class="cell-a">가</td><td class="cell-a">가</td><td class="cell-a">가</td><td class="cell-u">불</td>
+                  </tr>
+                  <tr>
+                    <td class="pname required"><span class="checkbox checked"></span> 민수 ⭐</td>
+                    <td class="cell-m">애</td><td class="cell-a">가</td><td class="cell-a">가</td>
+                    <td class="cell-a">가</td><td class="cell-u">불</td><td class="cell-a">가</td><td class="cell-m">애</td>
+                  </tr>
+                  <tr>
+                    <td class="pname">현주</td>
+                    <td class="cell-a">가</td><td class="cell-a">가</td><td class="cell-m">애</td>
+                    <td class="cell-m">애</td><td class="cell-a">가</td><td class="cell-u">불</td><td class="cell-a">가</td>
+                  </tr>
+                  <tr>
+                    <td class="pname"><span class="checkbox"></span> 윤재</td>
+                    <td class="cell-u">불</td><td class="cell-u">불</td><td class="cell-a">가</td>
+                    <td class="cell-a">가</td><td class="cell-m">애</td><td class="cell-a">가</td><td class="cell-u">불</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="note mt-md">
+              ⭐ 필수 참석자 / 가 = 가능 · 애 = 애매 · 불 = 불가
+            </div>
+
+            <div class="note-block">
+              <strong>추천 로직</strong> · ① 필수 참석자 모두 가능 → ② 가능 인원 최대 → ③ 평균 점수 → ④ 불가 인원 최소 순으로 정렬됩니다.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="annot-list">
+        <div class="title">화면 메모</div>
+        <ul>
+          <li>1순위 카드만 강조 (border 2px + 그림자) · 나머지는 동일 비중</li>
+          <li>"이 시간으로 확정" 클릭 시 모달 → 확인하면 모임 상태 CONFIRMED로 변경</li>
+          <li>매트릭스 셀 색상: 가능=진한 채움, 애매=빗금, 불가=빈 박스(대각선 줄)</li>
+          <li>필수 참석자 체크박스 클릭 시 즉시 추천 재계산 API 호출 (낙관적 UI 업데이트)</li>
+          <li>참여자 행을 클릭하면 해당 인원만 강조하는 행 하이라이트 (가시성 보조)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- =================== SCREEN 8 =================== -->
+    <section class="screen" id="s8">
+      <div class="screen-header">
+        <h2>08 · 최종 요약 페이지</h2>
+        <p>확정 후 모임장/참여자 모두에게 노출 · 캘린더 다운로드 + 공유 링크</p>
+      </div>
+
+      <div class="frame">
+        <div class="frame-label">DESKTOP · 확정 후 공유 페이지</div>
+        <div class="topbar">
+          <div class="logo">우리 언제?</div>
+          <div class="topbar-right">
+            <span class="note">확정된 모임</span>
+            <button class="btn ghost sm">목록으로</button>
+          </div>
+        </div>
+
+        <div class="summary-container">
+          <div class="summary-card">
+            <div class="summary-check">
+              <div class="check-circle">✓</div>
+              <div class="note" style="font-style:normal;">일정이 확정되었습니다</div>
+              <div class="confirmed-time">6월 8일 (토) 14:00 ~ 16:00</div>
+              <div class="note">2시간 · 5월 24일 확정</div>
+            </div>
+
+            <div class="summary-body">
+              <div class="field">
+                <span class="label">모임명</span>
+                <div style="font-size:16px;font-weight:600;">6월 전시 모임</div>
+              </div>
+              <div class="field">
+                <span class="label">설명</span>
+                <div>6월 초에 전시 보러 갈 사람들 일정 조율</div>
+              </div>
+              <div class="field">
+                <span class="label">참여자 (5명)</span>
+                <div class="participant-chips">
+                  <span class="chip">소미 (모임장)</span>
+                  <span class="chip">지원</span>
+                  <span class="chip">민수 ⭐</span>
+                  <span class="chip">현주</span>
+                  <span class="chip">윤재</span>
+                </div>
+              </div>
+              <div class="field">
+                <span class="label">초대 링크</span>
+                <div class="copy-box">
+                  <div class="url">https://whenwe.app/m/abc-123 (확정 후 공유용)</div>
+                  <button class="copy-btn">복사</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="summary-actions">
+
+              <!-- 캘린더 등록 그룹 -->
+              <div>
+                <div class="action-group-label">📅 캘린더에 추가</div>
+                <div class="action-stack">
+                  <button class="action-btn primary-action">
+                    <div class="action-main">
+                      <span>ICS 파일 다운로드</span>
+                      <span class="phase-badge phase-1">1차 MVP</span>
+                    </div>
+                    <span class="action-sub">Google · Apple · Outlook · 네이버 캘린더 모두 호환</span>
+                  </button>
+                  <button class="action-btn future">
+                    <div class="action-main">
+                      <span>G · Google 캘린더에 바로 추가</span>
+                      <span class="phase-badge phase-2">2차 확장</span>
+                    </div>
+                    <span class="action-sub">OAuth 한 번 연결 → 원클릭 등록 (계획)</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 공유 그룹 -->
+              <div>
+                <div class="action-group-label">🔗 모임 공유</div>
+                <div class="action-stack">
+                  <button class="action-btn">
+                    <div class="action-main">
+                      <span>요약 페이지 링크 복사</span>
+                      <span class="phase-badge phase-1">1차 MVP</span>
+                    </div>
+                    <span class="action-sub">단톡방·메신저 어디든 붙여넣기</span>
+                  </button>
+                  <button class="action-btn future">
+                    <div class="action-main">
+                      <span>💬 카카오톡으로 확정 메시지 보내기</span>
+                      <span class="phase-badge phase-3">3차 확장</span>
+                    </div>
+                    <span class="action-sub">모임명·시간·참여자 카드 메시지 자동 생성 (계획)</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <div style="max-width:560px;margin:0 auto 32px;">
+          <div class="note-block">
+            <strong>알림 전략</strong> · 자체 푸시 알림 대신 외부 캘린더 알림을 활용합니다. ICS 파일을 캘린더에 등록하면 사용자가 평소 쓰던 알림 설정(10분 전·1시간 전 등)이 그대로 적용됩니다.
+          </div>
+        </div>
+      </div>
+
+      <div class="annot-list">
+        <div class="title">화면 메모 · 단계별 확장 전략</div>
+        <ul>
+          <li><strong>1차 MVP</strong>: ICS 다운로드 + 요약 링크 복사 — 비용 0, 모든 캘린더 호환</li>
+          <li><strong>2차 확장</strong>: Google Calendar OAuth 직접 연동 — "원클릭 등록" UX, 토큰 관리 백엔드 어필 포인트</li>
+          <li><strong>3차 확장</strong>: 카카오톡 공유 메시지 템플릿 — 단톡방 흐름과 자연 연결 (Kakao Developers 비즈 앱 등록 필요)</li>
+          <li>네이버 캘린더는 공식 API가 없어 ICS import만 가능 → 1차 MVP가 사실상 네이버 사용자를 위한 최선책</li>
+          <li>모임장 진입 시: "다시 일정 조율하기" / "모임 종료(CLOSED)" 추가 액션 노출</li>
+          <li>참여자 진입 시: 위 액션 그대로 노출 (캘린더 추가가 본인 일정에 도움)</li>
+          <li>점선 박스(2차/3차) 버튼은 와이어프레임에서 미래 배치 자리잡기용 표현</li>
+        </ul>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  // Screen switching
+  const buttons = document.querySelectorAll('.nav-btn');
+  const screens = document.querySelectorAll('.screen');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.screen;
+      buttons.forEach(b => b.classList.remove('active'));
+      screens.forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(target).classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    });
+  });
+
+  // Wizard step preview switching (Screen 4)
+  window.showWizard = function(id) {
+    document.querySelectorAll('.wizard-step').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.wizard-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).style.display = 'block';
+    event.target.classList.add('active');
+
+    // Update stepper highlight
+    const n = parseInt(id.replace('w', ''));
+    document.querySelectorAll('#s4 .step').forEach((el, idx) => {
+      el.classList.remove('active', 'done');
+      if (idx + 1 < n) el.classList.add('done');
+      if (idx + 1 === n) el.classList.add('active');
+    });
+
+    // Update footer step counter
+    const footer = document.querySelector('#s4 .wizard-footer .note');
+    if (footer) footer.textContent = `Step ${n} of 5`;
+  };
+
+  // Rolling text on landing screen
+  const slot = document.querySelector('.rolling-slot');
+  if (slot) {
+    const words = ['만날까?', '떠나지?', '회의해?', '모일까?'];
+    let i = 0;
+    setInterval(() => {
+      i = (i + 1) % words.length;
+      slot.style.opacity = 0;
+      setTimeout(() => {
+        slot.textContent = words[i];
+        slot.style.opacity = 1;
+      }, 200);
+    }, 1800);
+    slot.style.transition = 'opacity 0.2s';
+  }
+</script>
+
+</body>
+</html>
