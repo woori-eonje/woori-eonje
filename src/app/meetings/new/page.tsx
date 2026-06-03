@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar, Button } from "@/components/primitives";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Users, BookOpen, Briefcase, Copy, Share } from "@/components/icons";
 
 const STEPS = [
@@ -122,7 +123,7 @@ const TIME_RANGES = [
 
 interface WizardData {
   name: string; desc: string; kind: string;
-  from: string; to: string; due: string;
+  from?: Date; to?: Date; due?: Date;
   duration: string; range: string;
 }
 
@@ -131,7 +132,7 @@ export default function WizardPage() {
   const [step, setStep] = useState(1);
   const [data, setData] = useState<WizardData>({
     name: "", desc: "", kind: "",
-    from: "", to: "", due: "",
+    from: undefined, to: undefined, due: undefined,
     duration: "", range: "",
   });
   const [copied, setCopied] = useState(false);
@@ -199,20 +200,38 @@ export default function WizardPage() {
         <>
           <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
             <Section q={STEPS[1].q} helper="이 기간 안에서 가능한 시간을 모아드려요. 응답 마감일은 조율 종료일보다 빨라야 해요.">
-              {[
-                { key: "from", label: "조율 시작일", placeholder: "2026.06.01" },
-                { key: "to",   label: "조율 종료일", placeholder: "2026.06.14" },
-                { key: "due",  label: "응답 마감일", placeholder: "2026.05.30 23:59" },
-              ].map((f) => (
-                <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <label style={{ fontSize: 13, fontWeight: 700 }}>
-                    {f.label} <span style={{ color: "var(--color-accent)" }}>*</span>
-                  </label>
-                  <input className="input" placeholder={f.placeholder}
-                    value={data[f.key as keyof WizardData]}
-                    onChange={(e) => set({ [f.key]: e.target.value })} />
-                </div>
-              ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 700 }}>
+                  조율 시작일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                </label>
+                <DatePicker
+                  value={data.from}
+                  onChange={(d) => set({ from: d })}
+                  placeholder="시작일 선택"
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 700 }}>
+                  조율 종료일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                </label>
+                <DatePicker
+                  value={data.to}
+                  onChange={(d) => set({ to: d })}
+                  placeholder="종료일 선택"
+                  fromDate={data.from}
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 700 }}>
+                  응답 마감일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                </label>
+                <DatePicker
+                  value={data.due}
+                  onChange={(d) => set({ due: d })}
+                  placeholder="마감일 선택"
+                  toDate={data.to}
+                />
+              </div>
             </Section>
 
             <div style={{
@@ -224,6 +243,7 @@ export default function WizardPage() {
           </div>
           <div className="bottom-bar">
             <Button block primary disabled={!data.from || !data.to || !data.due} onClick={next}>다음</Button>
+
           </div>
         </>
       )}
@@ -311,9 +331,9 @@ export default function WizardPage() {
               <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "-0.015em" }}>{data.name || "6월 전시 모임"}</div>
               <div className="divider" />
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div><div className="t-cap">조율 기간</div><div style={{ fontSize: 13, fontWeight: 700 }}>{data.from || "6.1"} — {data.to || "6.14"}</div></div>
+                <div><div className="t-cap">조율 기간</div><div style={{ fontSize: 13, fontWeight: 700 }}>{data.from ? data.from.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }) : "6.1"} — {data.to ? data.to.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }) : "6.14"}</div></div>
                 <div><div className="t-cap">소요 시간</div><div style={{ fontSize: 13, fontWeight: 700 }}>{data.duration || "2시간"}</div></div>
-                <div><div className="t-cap">응답 마감</div><div style={{ fontSize: 13, fontWeight: 700 }}>{data.due || "5.30"}</div></div>
+                <div><div className="t-cap">응답 마감</div><div style={{ fontSize: 13, fontWeight: 700 }}>{data.due ? data.due.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }) : "5.30"}</div></div>
               </div>
             </div>
           </div>
