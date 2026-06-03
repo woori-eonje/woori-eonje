@@ -1,11 +1,20 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { ChevronLeft } from "./icons";
+import {
+  Button as ShadcnButton,
+  type ButtonProps as ShadcnButtonProps,
+} from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-/* ── Button ── */
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+/* ── Button
+   기존 variant API (primary/secondary/outline/ghost/danger) 유지
+   shadcn/ui Button을 내부 엔진으로 사용                          ── */
+interface ButtonProps extends Omit<ShadcnButtonProps, "variant" | "size"> {
   variant?: "primary" | "secondary" | "outline" | "ghost" | "danger";
+  size?: "sm" | "default" | "lg" | "icon";
   primary?: boolean;
   secondary?: boolean;
   outline?: boolean;
@@ -15,14 +24,24 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
 }
+
+const VARIANT_MAP: Record<string, ShadcnButtonProps["variant"]> = {
+  primary:   "default",
+  secondary: "secondary",
+  outline:   "outline",
+  ghost:     "ghost",
+  danger:    "destructive",
+};
+
 export function Button({
   variant,
   primary, secondary, outline, ghost, danger,
+  size = "default",
   block,
   leftIcon,
   rightIcon,
   children,
-  className = "",
+  className,
   ...rest
 }: ButtonProps) {
   const v = variant
@@ -32,15 +51,18 @@ export function Button({
     || (ghost && "ghost")
     || (danger && "danger")
     || "primary";
+
   return (
-    <button
-      className={`btn ${v} ${block ? "block" : ""} ${className}`}
+    <ShadcnButton
+      variant={VARIANT_MAP[v]}
+      size={size}
+      className={cn(block && "w-full", className)}
       {...rest}
     >
       {leftIcon}
-      <span>{children}</span>
+      {children}
       {rightIcon}
-    </button>
+    </ShadcnButton>
   );
 }
 
@@ -69,34 +91,31 @@ export function TopBar({ title, onBack, right }: TopBarProps) {
 /* ── Logo ── */
 export function Logo({ size = 36 }: { size?: number }) {
   return (
-    <img
+    <Image
       src="/logo.svg"
       alt="우리 언제?"
-      style={{ height: size, display: "block" }}
+      height={size}
+      width={size * 3.5}
+      style={{ height: size, width: "auto", display: "block" }}
     />
   );
 }
 
 /* ── StatusPill ── */
-type MeetingStatus = "COLLECTING" | "READY_TO_CONFIRM" | "CONFIRMED" | "CLOSED" | "EXPIRED";
+export type MeetingStatus = "COLLECTING" | "READY_TO_CONFIRM" | "CONFIRMED" | "CLOSED" | "EXPIRED";
 const STATUS_MAP: Record<MeetingStatus, { cls: string; label: string; dot?: string }> = {
-  COLLECTING:        { cls: "ok",    label: "응답 수집 중",  dot: "var(--color-primary)" },
-  READY_TO_CONFIRM:  { cls: "maybe", label: "확정 필요",     dot: "var(--color-maybe)" },
-  CONFIRMED:         { cls: "ok",    label: "✓ 확정됨" },
-  CLOSED:            { cls: "gray",  label: "종료됨",        dot: "var(--color-text-muted)" },
-  EXPIRED:           { cls: "accent",label: "⚠ 마감됨" },
+  COLLECTING:        { cls: "ok",     label: "응답 수집 중", dot: "var(--color-primary)" },
+  READY_TO_CONFIRM:  { cls: "maybe",  label: "확정 필요",    dot: "var(--color-maybe)" },
+  CONFIRMED:         { cls: "ok",     label: "✓ 확정됨" },
+  CLOSED:            { cls: "gray",   label: "종료됨",       dot: "var(--color-text-muted)" },
+  EXPIRED:           { cls: "accent", label: "⚠ 마감됨" },
 };
 export function StatusPill({ status }: { status: MeetingStatus }) {
   const s = STATUS_MAP[status] ?? STATUS_MAP.COLLECTING;
   return (
     <span className={`pill ${s.cls}`}>
       {s.dot && (
-        <span
-          style={{
-            width: 6, height: 6, borderRadius: 999,
-            background: s.dot, display: "inline-block",
-          }}
-        />
+        <span style={{ width: 6, height: 6, borderRadius: 999, background: s.dot, display: "inline-block" }} />
       )}
       {s.label}
     </span>
