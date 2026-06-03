@@ -3,9 +3,10 @@
 import { useState, useMemo, use } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar, Button } from "@/components/primitives";
-
-type SlotState = "available" | "maybe" | "unavail";
-type Picks = Record<string, Record<string, SlotState>>;
+import { DateTab } from "@/components/time-select/DateTab";
+import { TimeSlot } from "@/components/time-select/TimeSlot";
+import { ModeToggle } from "@/components/time-select/ModeToggle";
+import type { SlotState, Picks } from "@/types/meeting";
 
 const DATES = [
   { id: "6.4", label: "6.4", weekday: "목" },
@@ -19,83 +20,6 @@ const TIMES = [
   "오후 6:00","오후 6:30","오후 7:00","오후 7:30","오후 8:00",
   "오후 8:30","오후 9:00","오후 9:30","오후 10:00","오후 10:30",
 ];
-const STATE_INFO: Record<SlotState, { tag: string; short: string }> = {
-  available: { tag: "○ 가능", short: "가능" },
-  maybe:     { tag: "△ 애매", short: "애매" },
-  unavail:   { tag: "✕ 불가", short: "불가" },
-};
-
-function DateTab({ active, label, weekday, count, onClick }: {
-  active: boolean; label: string; weekday: string; count: number; onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        flex: "none", minWidth: 64,
-        padding: "10px 12px",
-        border: active ? "1px solid var(--color-primary)" : "1px solid transparent",
-        background: active ? "var(--color-primary-soft)" : "transparent",
-        color: active ? "var(--color-primary)" : "var(--color-text)",
-        borderRadius: 14,
-        fontFamily: "inherit",
-        letterSpacing: "-0.015em",
-        cursor: "pointer",
-        textAlign: "center",
-        transition: "background 160ms, border-color 160ms",
-      }}
-    >
-      <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.7 }}>{weekday}</div>
-      <div style={{ fontSize: 17, fontWeight: 800, marginTop: 2 }}>{label}</div>
-      {count > 0 && (
-        <div style={{ fontSize: 10, fontWeight: 700, marginTop: 4, color: "var(--color-primary)" }}>
-          ● {count}
-        </div>
-      )}
-    </button>
-  );
-}
-
-function TimeSlot({ time, state, onTap }: {
-  time: string; state: SlotState | null; onTap: () => void;
-}) {
-  const cls = state === null ? "" :
-    state === "available" ? "s-available" :
-    state === "maybe" ? "s-maybe" : "s-unavail";
-  const tag = state === null ? null : STATE_INFO[state].tag;
-  return (
-    <button
-      type="button"
-      className={`slot ${cls}`}
-      onClick={onTap}
-      aria-label={`${time} ${state ? STATE_INFO[state].short : "선택 안 함"}`}
-    >
-      <span>{time}</span>
-      {tag
-        ? <span className="tag">{tag}</span>
-        : <span className="tag" style={{ opacity: 0.5 }}>—</span>
-      }
-    </button>
-  );
-}
-
-function ModeToggle({ value, onChange }: { value: SlotState; onChange: (v: SlotState) => void }) {
-  return (
-    <div className="toggle" role="tablist" aria-label="현재 선택 모드">
-      {(["available", "maybe", "unavail"] as SlotState[]).map((s) => (
-        <button
-          key={s}
-          role="tab"
-          aria-selected={value === s}
-          className={value === s ? `on ${s}` : ""}
-          onClick={() => onChange(s)}
-        >
-          {STATE_INFO[s].tag}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 export default function TimeSelectPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
