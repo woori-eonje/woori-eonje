@@ -155,6 +155,32 @@ import { Calendar, Check, ChevronRight, ... } from "@/components/icons";
 
 API 연동 시 백엔드 API 명세는 `src/app/meetings/new/page.tsx` 주석 또는 기획서 참조.
 
+### 환경변수
+
+백엔드 연동 시 `.env.local.example`을 `.env.local`로 복사 후 URL 설정:
+```
+NEXT_PUBLIC_API_URL=http://localhost:8080
+```
+
+### API 클라이언트 구조 (연동 시 생성)
+
+```
+src/
+  lib/
+    api/
+      client.ts       # fetch 기본 설정 (baseURL, 헤더, 에러 처리)
+      meetings.ts     # 모임 관련 API 함수
+      invites.ts      # 초대 링크 관련 API 함수
+      availability.ts # 가능 시간 제출 API 함수
+  hooks/
+    useMeetings.ts         # TanStack Query 훅
+    useRecommendations.ts
+    useAvailability.ts
+  types/
+    api.ts            # 공통 응답 타입 (ApiResponse<T>)
+    meeting.ts        # Meeting, Participant, Slot 타입
+```
+
 ### 예정된 백엔드 API 엔드포인트 (Spring Boot)
 ```
 POST /api/meetings               모임 생성

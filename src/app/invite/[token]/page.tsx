@@ -2,7 +2,7 @@
 
 import { useState, use } from "react";
 import { useRouter } from "next/navigation";
-import { TopBar, Button, Logo } from "@/components/primitives";
+import { Button, Logo } from "@/components/primitives";
 import { Calendar } from "@/components/icons";
 
 export default function InviteJoinPage({ params }: { params: Promise<{ token: string }> }) {

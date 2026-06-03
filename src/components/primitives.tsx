@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { ChevronLeft } from "./icons";
 
 /* ── Button ── */
@@ -69,10 +70,12 @@ export function TopBar({ title, onBack, right }: TopBarProps) {
 /* ── Logo ── */
 export function Logo({ size = 36 }: { size?: number }) {
   return (
-    <img
+    <Image
       src="/logo.svg"
       alt="우리 언제?"
-      style={{ height: size, display: "block" }}
+      height={size}
+      width={size * 3.5}
+      style={{ height: size, width: "auto", display: "block" }}
     />
   );
 }

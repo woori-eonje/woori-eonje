@@ -28,9 +28,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; echo \"$f\" | grep -qE '\\.tsx?$' && cd /Users/gimsomi/Desktop/work/woori-eonje && npx tsc --noEmit 2>&1 | head -20 || true; }",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; echo \"$f\" | grep -qE '\\.tsx?$' && cd /Users/gimsomi/Desktop/work/woori-eonje && npx tsc --noEmit 2>&1 | head -20 || exit 0; }",
             "statusMessage": "타입 체크 중...",
-            "async": true
+            "asyncRewake": true
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": "cd /Users/gimsomi/Desktop/work/woori-eonje && npm run lint 2>&1; code=$?; if [ $code -ne 0 ]; then printf '{\"continue\": false, \"stopReason\": \"Lint 에러가 있어요. 수정 후 다시 커밋해주세요.\"}'; fi",
+            "statusMessage": "Lint 체크 중..."
           }
         ]
       }
