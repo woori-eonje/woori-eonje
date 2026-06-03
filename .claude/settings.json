@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build)",
+      "Bash(npm run dev*)",
+      "Bash(npm run lint)",
+      "Bash(npm install*)",
+      "Bash(npx tsc*)",
+      "Bash(git status)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git stash*)",
+      "Bash(ls*)",
+      "Bash(find src*)",
+      "Bash(find .claude*)",
+      "Bash(grep*)",
+      "Bash(cat package.json)",
+      "Bash(node -v)",
+      "Bash(curl -s -o /dev/null*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // empty' | { read -r f; echo \"$f\" | grep -qE '\\.tsx?$' && cd /Users/gimsomi/Desktop/work/woori-eonje && npx tsc --noEmit 2>&1 | head -20 || true; }",
+            "statusMessage": "타입 체크 중...",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "worktree": {
+    "symlinkDirectories": ["node_modules", ".next"]
+  }
+}

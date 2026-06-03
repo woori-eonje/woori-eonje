@@ -2,6 +2,27 @@
 
 기간 기반 모임 시간 조율 서비스. 모임장이 조율 기간을 설정하면 참여자들이 가능한 시간을 제출하고, 시스템이 가장 많이 겹치는 시간 TOP 5를 추천한다.
 
+## 서브에이전트 활용 가이드
+
+### 언제 서브에이전트를 쓸 것인가
+
+| 상황 | 에이전트 타입 | 이유 |
+|---|---|---|
+| 파일/심볼 위치 탐색 ("어디 있지?") | `Explore` | 빠른 read-only 탐색, 메인 컨텍스트 보호 |
+| 구조 설계 / 접근법 비교 | `Plan` | 구현 전 전략 정리 |
+| 독립적인 작업 두 개 동시에 | `general-purpose` × 2 병렬 | 서로 의존성이 없는 작업은 항상 병렬로 |
+
+### 이 프로젝트에서 병렬로 처리하기 좋은 작업
+
+- 여러 페이지 파일 동시 생성 (Invite + TimeSelect 등)
+- 파일 읽기 + 의존성 분석 동시에
+- 타입 체크 + 빌드 동시에
+
+### 병렬 작업 시 주의
+같은 파일을 두 에이전트가 동시에 쓰면 충돌한다. 편집 범위가 겹치면 순차 처리.
+
+---
+
 ## 환경 제약 (중요)
 
 - **Node.js 18.18.0** — 이 환경에서 실행됨
@@ -106,6 +127,32 @@ import { Calendar, Check, ChevronRight, ... } from "@/components/icons";
 **Poppy(`#FF6B6B`)는 CTA 버튼이나 배경에 절대 사용하지 않는다.** 로고 물음표, 필수 참석자 표시, 작은 장식 포인트에만 제한.
 
 베이지/크림 계열 배경 사용 금지. 배경은 항상 `#F6F8FA` 또는 `#FFFFFF`.
+
+## 현재 상태 (Mock 데이터)
+
+현재 모든 화면은 하드코딩된 mock 데이터로 동작한다. 실제 API 연동 전 작업 시 참고:
+
+- **mock 모임 데이터**: `src/app/meetings/page.tsx` 상단 `MEETINGS` 배열
+- **mock 추천 결과**: `src/app/meetings/[id]/recommendations/page.tsx` 상단 `RECS` 배열
+- **mock 시간 슬롯**: `src/app/invite/[token]/time-select/page.tsx` 상단 `DATES`, `TIMES`
+- **mock 참여자**: `src/app/meetings/[id]/confirmed/page.tsx` 상단 `PARTICIPANTS` 배열
+
+API 연동 시 백엔드 API 명세는 `src/app/meetings/new/page.tsx` 주석 또는 기획서 참조.
+
+### 예정된 백엔드 API 엔드포인트 (Spring Boot)
+```
+POST /api/meetings               모임 생성
+GET  /api/meetings/{id}          모임 조회
+GET  /api/invites/{token}        초대 링크 조회
+POST /api/invites/{token}/participants  참여자 등록
+GET  /api/meetings/{id}/slots    시간 슬롯 조회
+POST /api/meetings/{id}/availability   가능 시간 제출
+GET  /api/meetings/{id}/recommendations  추천 결과
+POST /api/meetings/{id}/confirm  일정 확정
+GET  /api/meetings/{id}/calendar.ics    ICS 다운로드
+```
+
+---
 
 ## 서비스 용어 (한국어)
 
