@@ -2,6 +2,22 @@
 
 기간 기반 모임 시간 조율 서비스. 모임장이 조율 기간을 설정하면 참여자들이 가능한 시간을 제출하고, 시스템이 가장 많이 겹치는 시간 TOP 5를 추천한다.
 
+## 브랜치 전략
+
+```
+main      → 배포 가능한 안정 버전
+develop   → 통합 개발 브랜치 (기본 작업 브랜치)
+feature/* → 기능 개발
+fix/*     → 버그 수정
+```
+
+**작업 시작 전**: `develop` 기준으로 `feature/<기능명>` 브랜치를 만든다.  
+예: `feature/time-select-api`, `feature/recommendations-ui`
+
+**PR 대상**: `feature/*` → `develop`, `develop` → `main` (배포 준비 시)
+
+---
+
 ## 서브에이전트 활용 가이드
 
 ### 언제 서브에이전트를 쓸 것인가
