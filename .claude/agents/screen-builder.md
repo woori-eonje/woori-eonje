@@ -12,12 +12,25 @@ description: 우리 언제? 새 화면 구현 전담. 디자인 시스템에 정
 - Poppy `#FF6B6B`: 로고 물음표, 필수 참석자 dot, 작은 장식 포인트에만. CTA 버튼·배경 절대 금지
 - 배경: `#F6F8FA` 또는 `#FFFFFF`. 베이지·크림 금지
 
-**CSS 클래스** — globals.css에 이미 정의됨. Tailwind utility로 대체하지 않음
-- 버튼: `.btn.primary / .secondary / .outline / .ghost / .danger`
+**컴포넌트 계층**
+```
+UI 프리미티브     → @/components/ui/button, input, select, badge
+앱 레이아웃       → @/components/primitives (TopBar, Logo, StatusPill)
+아이콘            → @/components/icons
+도메인 컴포넌트    → @/components/time-select/, @/components/meeting/
+타입              → @/types/meeting
+```
+
+새 컴포넌트 위치 기준:
+- 두 곳 이상에서 쓰이면 → `components/meeting/` 또는 `components/time-select/`
+- 한 화면에서만 쓰이면 → 해당 `page.tsx` 안에 인라인 유지
+
+**CSS 클래스** — globals.css에 이미 정의됨. 레이아웃·상태 표현에 사용
 - 카드: `.card`, `.card.tight`, `.card.emphasis`
 - 시간 슬롯: `.slot .s-available / .s-maybe / .s-unavail`
 - 상태 배지: `.pill .ok / .maybe / .gray / .accent`
 - 토글: `.toggle`
+- 탑바: `.topbar`, 하단 CTA: `.bottom-bar`
 - 하단 CTA: `.bottom-bar`
 - 탑바: `.topbar`
 - 타이포: `.t-h1 / .t-h2 / .t-h3 / .t-body / .t-body2 / .t-cap`
@@ -33,8 +46,10 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
 **파일 구조**
 - 모든 인터랙티브 페이지 첫 줄: `"use client";`
-- 아이콘: `src/components/icons.tsx`에서 임포트
-- 공용 컴포넌트: `src/components/primitives.tsx` (Button, TopBar, Logo, StatusPill)
+- 버튼: `@/components/ui/button` 또는 `@/components/primitives`의 Button (동일 shadcn/ui 기반)
+- 아이콘: `@/components/icons`
+- 공용 컴포넌트: `@/components/primitives` (TopBar, Logo, StatusPill)
+- 타입: `@/types/meeting`에서 임포트 (Meeting, Participant, SlotState, Recommendation 등)
 
 ## 화면 구현 체크리스트
 

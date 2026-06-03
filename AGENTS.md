@@ -118,13 +118,64 @@ export default function Page({ params }: { params: { id: string } }) {
 | `.t-h1/.t-h2/.t-h3/.t-body/.t-body2/.t-cap` | 타이포그래피 |
 | `.skeleton` | 로딩 스켈레톤 |
 
-### 컴포넌트 임포트
-```tsx
-import { Button, TopBar, Logo, StatusPill } from "@/components/primitives";
-import { Calendar, Check, ChevronRight, ... } from "@/components/icons";
+### 컴포넌트 구조
+
+```
+src/
+  components/
+    ui/                   ← shadcn/ui 프리미티브 (Button, Input, Select, Badge, Separator)
+    primitives.tsx         ← 앱 레이아웃 컴포넌트 (TopBar, Logo, StatusPill, BrandDecor)
+    icons.tsx              ← Lucide 스타일 인라인 SVG 아이콘
+    time-select/
+      DateTab.tsx          ← 날짜 탭 버튼
+      TimeSlot.tsx         ← 시간 슬롯 버튼 (가능/애매/불가 상태)
+      ModeToggle.tsx       ← 가능/애매/불가 모드 선택 토글
+    meeting/
+      MeetingCard.tsx      ← 모임 목록 카드
+      ParticipantRow.tsx   ← 참여자 행 (상태 배지 포함)
+      StatRow.tsx          ← 가능/애매/불가 집계 행
+  types/
+    meeting.ts             ← 공유 도메인 타입 (Meeting, Participant, SlotState, Recommendation 등)
+  lib/
+    utils.ts               ← cn() 유틸 (tailwind-merge + clsx)
 ```
 
-`Button`에는 `variant="primary"` 또는 boolean shorthand(`primary`, `outline` 등) 모두 가능.
+### 컴포넌트 임포트
+```tsx
+// UI 프리미티브 (shadcn/ui 기반)
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+
+// 앱 공용 컴포넌트
+import { TopBar, Logo, StatusPill } from "@/components/primitives";
+import { Calendar, Check, ChevronRight } from "@/components/icons";
+
+// 도메인 컴포넌트
+import { DateTab } from "@/components/time-select/DateTab";
+import { TimeSlot } from "@/components/time-select/TimeSlot";
+import { ModeToggle } from "@/components/time-select/ModeToggle";
+import { MeetingCard } from "@/components/meeting/MeetingCard";
+import { ParticipantRow } from "@/components/meeting/ParticipantRow";
+import { StatRow } from "@/components/meeting/StatRow";
+
+// 타입
+import type { Meeting, Participant, SlotState, Recommendation } from "@/types/meeting";
+```
+
+### Button variants
+primitives.tsx의 Button은 기존 variant API를 유지하면서 shadcn/ui를 내부 엔진으로 사용한다.
+
+| primitives.tsx variant | shadcn/ui variant |
+|---|---|
+| `primary` | `default` (Forest bg) |
+| `secondary` | `secondary` (soft Forest bg) |
+| `outline` | `outline` (Forest border) |
+| `ghost` | `ghost` |
+| `danger` | `destructive` |
+
+새 컴포넌트에서는 `@/components/ui/button`을 직접 써도 되고, primitives의 Button을 써도 된다.
 
 ## 디자인 토큰 (CSS 커스텀 프로퍼티)
 
