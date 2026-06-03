@@ -1,11 +1,10 @@
 "use client";
 
 import { use, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Logo, Button } from "@/components/primitives";
 import { ParticipantRow } from "@/components/meeting/ParticipantRow";
-import { Check } from "@/components/icons";
+import { Check, Clock, PlusCircle, Copy, Share } from "@/components/icons";
 import type { Recommendation } from "@/types/meeting";
 
 /* ── 상수 ── */
@@ -35,17 +34,9 @@ const ALL_RECS: Recommendation[] = [
     ],
   },
   { rank: 2, when: "6.6 (목) 오후 7:00 – 9:00",  dateLabel: "6월 6일 목요일", time: "오후 7:00 – 9:00",  availableCount: 4, maybeCount: 1, unavailableCount: 1, requiredSatisfied: false, note: "필수 1명 애매",
-    participants: [
-      { name: "소미", status: "available", required: true }, { name: "지현", status: "maybe", required: true },
-      { name: "민수", status: "available" }, { name: "유나", status: "available" },
-      { name: "태오", status: "available" }, { name: "하린", status: "unavail" },
-    ] },
+    participants: [{ name: "소미", status: "available", required: true }, { name: "지현", status: "maybe", required: true }, { name: "민수", status: "available" }, { name: "유나", status: "available" }, { name: "태오", status: "available" }, { name: "하린", status: "unavail" }] },
   { rank: 3, when: "6.10 (월) 오후 8:00 – 10:00", dateLabel: "6월 10일 월요일", time: "오후 8:00 – 10:00", availableCount: 3, maybeCount: 2, unavailableCount: 0, requiredSatisfied: true,
-    participants: [
-      { name: "소미", status: "available", required: true }, { name: "지현", status: "available", required: true },
-      { name: "민수", status: "maybe" }, { name: "유나", status: "available" },
-      { name: "태오", status: "maybe" }, { name: "하린", status: "available" },
-    ] },
+    participants: [{ name: "소미", status: "available", required: true }, { name: "지현", status: "available", required: true }, { name: "민수", status: "maybe" }, { name: "유나", status: "available" }, { name: "태오", status: "maybe" }, { name: "하린", status: "available" }] },
   { rank: 4, when: "6.7 (일) 오후 3:00 – 5:00",   dateLabel: "6월 7일 일요일",  time: "오후 3:00 – 5:00",  availableCount: 3, maybeCount: 1, unavailableCount: 2, requiredSatisfied: false, note: "필수 1명 불가", participants: [] },
   { rank: 5, when: "6.5 (금) 오후 9:00 – 11:00",   dateLabel: "6월 5일 금요일",  time: "오후 9:00 – 11:00", availableCount: 3, maybeCount: 0, unavailableCount: 3, requiredSatisfied: true,  participants: [] },
 ];
@@ -66,20 +57,231 @@ function buildAgg() {
 }
 
 function cellBg(ok: number) {
-  if (ok >= 5) return { bg: "#1A9562",               color: "#fff" };
-  if (ok === 4) return { bg: "rgba(26,149,98,0.45)", color: "#fff" };
-  if (ok === 3) return { bg: "rgba(26,149,98,0.22)", color: "var(--color-text)" };
+  if (ok >= 5) return { bg: "#1A9562",                color: "#fff" };
+  if (ok === 4) return { bg: "rgba(26,149,98,0.45)",  color: "#fff" };
+  if (ok === 3) return { bg: "rgba(26,149,98,0.22)",  color: "var(--color-text)" };
   if (ok === 2) return { bg: "rgba(183,211,255,0.55)",color: "var(--color-text)" };
   if (ok === 1) return { bg: "rgba(214,231,255,0.55)",color: "var(--color-text-2)" };
   return { bg: "transparent", color: "var(--color-text-2)" };
 }
 
-/* ── 탭 타입 ── */
 type Tab = "aggregate" | "recommendations";
 
-/* ══════════════════════════════════════════════════════ */
-/*  히트맵 탭                                              */
-/* ══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   앱 헤더
+══════════════════════════════════════════════════════ */
+function AppHeader() {
+  return (
+    <header style={{
+      height: 68,
+      background: "var(--color-surface)",
+      borderBottom: "1px solid var(--color-line)",
+      display: "flex", alignItems: "center", gap: 20,
+      padding: "0 32px",
+      position: "sticky", top: 0, zIndex: 10,
+    }}>
+      <Link href="/meetings" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
+        <Logo size={24} />
+      </Link>
+
+      {/* 내비게이션 */}
+      <nav style={{ display: "flex", gap: 4, marginLeft: 24 }}>
+        {[
+          { label: "내 모임", active: true },
+          { label: "참여자", active: false },
+          { label: "설정",   active: false },
+        ].map(({ label, active }) => (
+          <a key={label} style={{
+            height: 36, padding: "0 16px",
+            display: "inline-flex", alignItems: "center",
+            color: active ? "var(--color-primary)" : "var(--color-text-2)",
+            textDecoration: "none",
+            fontSize: 14, fontWeight: 700, letterSpacing: "-0.015em",
+            whiteSpace: "nowrap" as const,
+            borderRadius: 999,
+            background: active ? "var(--color-primary-soft)" : "transparent",
+            cursor: "pointer",
+            transition: "background 160ms, color 160ms",
+          }}>
+            {label}
+          </a>
+        ))}
+      </nav>
+
+      <span style={{ flex: 1 }} />
+
+      {/* 새 모임 버튼 */}
+      <Link href="/meetings/new" style={{
+        height: 36, padding: "0 14px",
+        borderRadius: 999, border: 0,
+        background: "var(--color-primary)", color: "#fff",
+        fontFamily: "inherit", fontSize: 13, fontWeight: 700,
+        letterSpacing: "-0.015em", cursor: "pointer",
+        whiteSpace: "nowrap" as const,
+        display: "inline-flex", alignItems: "center", gap: 6,
+        textDecoration: "none",
+        transition: "background 160ms",
+      }}>
+        <PlusCircle size={14} color="#fff" />
+        새 모임
+      </Link>
+
+      {/* 아바타 */}
+      <span style={{
+        width: 36, height: 36, borderRadius: 999,
+        background: "var(--color-primary-soft)", color: "var(--color-primary)",
+        fontWeight: 800, fontSize: 14,
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+      }}>
+        소
+      </span>
+    </header>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   미팅 히어로 스트립
+══════════════════════════════════════════════════════ */
+function MeetingHero() {
+  return (
+    <div style={{
+      background: "var(--color-surface)",
+      border: "1px solid var(--color-line)",
+      borderRadius: 24,
+      padding: "24px 28px",
+      display: "flex",
+      alignItems: "center",
+      gap: 24,
+      position: "relative",
+      overflow: "hidden",
+      marginBottom: 24,
+    }}>
+      {/* Baby Blue 그라데이션 accent */}
+      <div style={{
+        position: "absolute", top: 0, bottom: 0, right: 0,
+        width: 260,
+        background: "linear-gradient(110deg, transparent 0%, var(--color-baby-blue) 100%)",
+        opacity: 0.55,
+        borderTopRightRadius: 24,
+        borderBottomRightRadius: 24,
+        pointerEvents: "none",
+      }} aria-hidden="true" />
+
+      {/* 장식 SVG */}
+      <svg width="44" height="34" viewBox="0 0 64 48" style={{ position: "absolute", top: 22, right: 30, opacity: 0.95, zIndex: 1 }} aria-hidden="true">
+        <path d="M0 48 Q0 0 32 0 Q64 0 64 48 Z" fill="#1A9562"/>
+        <circle cx="24" cy="22" r="2" fill="#fff"/><circle cx="40" cy="22" r="2" fill="#fff"/>
+        <path d="M24 30 Q32 36 40 30" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round"/>
+      </svg>
+      <svg width="50" height="40" viewBox="0 0 76 62" style={{ position: "absolute", bottom: 12, right: 100, zIndex: 1 }} aria-hidden="true">
+        <g fill="#E6DBF7">
+          <circle cx="14" cy="36" r="14"/><circle cx="30" cy="20" r="14"/>
+          <circle cx="48" cy="18" r="16"/><circle cx="62" cy="36" r="14"/>
+          <circle cx="38" cy="46" r="16"/>
+        </g>
+      </svg>
+
+      {/* 모임 정보 */}
+      <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, color: "var(--color-primary)" }}>
+          친구 모임
+        </div>
+        <h1 style={{ margin: "6px 0 0", fontSize: 26, fontWeight: 800, letterSpacing: "-0.035em", lineHeight: 1.25 }}>
+          6월 전시 모임
+        </h1>
+        <p style={{ margin: "8px 0 0", fontSize: 14, color: "var(--color-text-2)", letterSpacing: "-0.01em", lineHeight: 1.5 }}>
+          6월 초에 전시 보러 갈 사람들 일정 조율
+        </p>
+        <div style={{ display: "flex", gap: 18, marginTop: 12, flexWrap: "wrap" as const }}>
+          {[
+            { label: "조율 기간", value: "6.1 — 6.14" },
+            { label: "예상 소요", value: "2시간" },
+            { label: "응답",     value: "5/6명", color: "var(--color-primary)" },
+            { label: "마감까지", value: "2일 6시간" },
+          ].map(({ label, value, color }) => (
+            <span key={label} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, fontSize: 13, color: "var(--color-text-2)", whiteSpace: "nowrap" as const }}>
+              {label} <b style={{ color: color ?? "var(--color-text)", fontWeight: 700 }}>{value}</b>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* 액션 버튼 */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" as const, flex: "none", position: "relative", zIndex: 1 }}>
+        <span className="pill ok">
+          <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--color-primary)", display: "inline-block" }} />
+          응답 수집 중
+        </span>
+        <button style={{
+          height: 44, padding: "0 18px", borderRadius: 14,
+          border: "1px solid var(--color-primary)", background: "#fff",
+          color: "var(--color-primary)", fontFamily: "inherit",
+          fontSize: 14, fontWeight: 700, letterSpacing: "-0.015em",
+          cursor: "pointer", whiteSpace: "nowrap" as const,
+          display: "inline-flex", alignItems: "center", gap: 8,
+          transition: "background 160ms",
+        }}>
+          <Copy size={15} color="var(--color-primary)" /> 링크 복사
+        </button>
+        <button style={{
+          height: 44, padding: "0 18px", borderRadius: 14,
+          border: "none", background: "var(--color-primary)",
+          color: "#fff", fontFamily: "inherit",
+          fontSize: 14, fontWeight: 700, letterSpacing: "-0.015em",
+          cursor: "pointer", whiteSpace: "nowrap" as const,
+          display: "inline-flex", alignItems: "center", gap: 8,
+          transition: "background 160ms",
+        }}>
+          <Share size={15} color="#fff" /> 공유
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   탭 스위처
+══════════════════════════════════════════════════════ */
+function PageTabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  return (
+    <div style={{
+      display: "inline-flex",
+      background: "var(--color-surface)",
+      border: "1px solid var(--color-line)",
+      borderRadius: 14,
+      padding: 4, gap: 2,
+      marginBottom: 24,
+    }}>
+      {([
+        { key: "aggregate",       label: "응답 현황" },
+        { key: "recommendations", label: "추천 결과" },
+      ] as const).map(({ key, label }) => (
+        <button
+          key={key}
+          onClick={() => setTab(key)}
+          style={{
+            height: 40, padding: "0 18px",
+            background: tab === key ? "var(--color-primary-soft)" : "transparent",
+            border: 0, borderRadius: 10,
+            fontFamily: "inherit", fontSize: 14, fontWeight: 700,
+            letterSpacing: "-0.015em",
+            color: tab === key ? "var(--color-primary)" : "var(--color-text-2)",
+            cursor: "pointer", whiteSpace: "nowrap" as const,
+            display: "inline-flex", alignItems: "center", gap: 8,
+            transition: "background 160ms, color 160ms",
+          }}
+        >
+          <Clock size={15} color={tab === key ? "var(--color-primary)" : "var(--color-text-2)"} />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
+   응답 현황 탭 — 히트맵
+══════════════════════════════════════════════════════ */
 function AggregateTab() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const agg = useMemo(() => buildAgg(), []);
@@ -96,32 +298,32 @@ function AggregateTab() {
   ];
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24, alignItems: "start" }}>
-      {/* 메인 — 히트맵 */}
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 340px", gap: 24, alignItems: "start" }}>
+      {/* 히트맵 */}
       <div className="card" style={{ padding: 28, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap" as const, gap: 12 }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: "-0.025em" }}>언제 가장 많이 모일 수 있을까요?</h2>
+            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1.3 }}>언제 가장 많이 모일 수 있을까요?</h2>
             <p className="t-body2" style={{ marginTop: 6 }}>색이 진할수록 더 많은 사람이 가능해요. 셀을 누르면 누가 가능한지 보여드릴게요.</p>
           </div>
           {/* 범례 */}
           <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 12, color: "var(--color-text-2)", flexWrap: "wrap" as const }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" as const }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <span style={{ display: "inline-flex", borderRadius: 4, overflow: "hidden", border: "1px solid var(--color-line)" }}>
                 <span style={{ width: 18, height: 14, background: "rgba(214,231,255,0.55)", display: "block" }} />
                 <span style={{ width: 18, height: 14, background: "rgba(183,211,255,0.55)", display: "block" }} />
               </span>
               1–2명 가능
             </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" as const }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <span style={{ display: "inline-flex", borderRadius: 4, overflow: "hidden", border: "1px solid var(--color-line)" }}>
                 <span style={{ width: 18, height: 14, background: "rgba(26,149,98,0.22)", display: "block" }} />
                 <span style={{ width: 18, height: 14, background: "rgba(26,149,98,0.45)", display: "block" }} />
                 <span style={{ width: 18, height: 14, background: "#1A9562", display: "block" }} />
               </span>
-              3명 이상
+              3명 이상 — 추천 가능
             </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" as const }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
               <span style={{ width: 14, height: 14, border: "1px dashed var(--color-maybe)", borderRadius: 3, display: "inline-block" }} />
               애매 포함
             </span>
@@ -129,7 +331,7 @@ function AggregateTab() {
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "separate", borderSpacing: 5, fontFamily: "inherit", minWidth: 500 }}>
+          <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "separate", borderSpacing: 5, fontFamily: "inherit", minWidth: 480 }}>
             <thead>
               <tr>
                 <th style={{ width: 52 }} />
@@ -157,15 +359,15 @@ function AggregateTab() {
                           onClick={() => setPicked(key)}
                           aria-label={`${d.weekday} ${d.label} ${h} 가능 ${data.ok}명`}
                           style={{
-                            width: "100%", height: 40,
+                            width: "100%", height: 42,
                             border: data.m > 0 ? "1px dashed var(--color-maybe)" : `1px solid ${data.ok > 0 ? "transparent" : "var(--color-line)"}`,
                             padding: 0, cursor: "pointer",
-                            borderRadius: 7,
+                            borderRadius: 8,
                             fontSize: 13, fontWeight: 700,
                             background: bg, color,
                             outline: isPicked ? "2px solid var(--color-primary)" : "none",
-                            outlineOffset: isPicked ? 1 : 0,
-                            transition: "outline 80ms",
+                            outlineOffset: 1,
+                            transition: "outline 80ms, box-shadow 120ms",
                           }}
                         >
                           {data.ok > 0 ? data.ok : ""}
@@ -218,7 +420,6 @@ function AggregateTab() {
           )}
         </div>
 
-        {/* 응답 현황 */}
         <div className="card tight" style={{ padding: 22, position: "relative", overflow: "hidden" }}>
           <span style={{ position: "absolute", top: -20, right: -16, width: 70, height: 70, borderRadius: 999, background: "var(--color-baby-blue)", opacity: 0.55 }} aria-hidden="true" />
           <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 8 }}>응답 현황</div>
@@ -236,18 +437,17 @@ function AggregateTab() {
   );
 }
 
-/* ══════════════════════════════════════════════════════ */
-/*  추천 결과 탭 (데스크탑 레이아웃)                         */
-/* ══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   추천 결과 탭
+══════════════════════════════════════════════════════ */
 function RecommendationsTab() {
   const [selected, setSelected] = useState(1);
   const rec = ALL_RECS.find((r) => r.rank === selected) ?? ALL_RECS[0];
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 24, alignItems: "start" }}>
-      {/* LEFT — 선택된 추천 상세 + 순위 목록 */}
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", gap: 24, alignItems: "start" }}>
+      {/* LEFT */}
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
         {/* 히어로 카드 */}
         <div className="card emphasis" style={{ position: "relative", display: "flex", gap: 28, padding: 32 }}>
           <span style={{
@@ -262,7 +462,6 @@ function RecommendationsTab() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="t-body2">{rec.dateLabel}</div>
             <h2 style={{ margin: "6px 0 0", fontSize: 36, fontWeight: 900, letterSpacing: "-0.045em", lineHeight: 1.15 }}>{rec.time}</h2>
-
             <div style={{ marginTop: 18, fontSize: 16, lineHeight: 1.6, letterSpacing: "-0.015em" }}>
               이 시간엔{" "}
               <b style={{ color: "var(--color-primary)" }}>{rec.availableCount}명이 가능</b>
@@ -270,7 +469,6 @@ function RecommendationsTab() {
               {rec.unavailableCount > 0 && <>, <b style={{ color: "var(--color-text-muted)" }}>{rec.unavailableCount}명은 불가</b></>}
               <span style={{ color: "var(--color-text-2)" }}>예요.</span>
             </div>
-
             <div style={{ marginTop: 14 }}>
               {rec.requiredSatisfied ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, background: "var(--color-primary-soft)", color: "var(--color-primary)", fontSize: 13, fontWeight: 700 }}>
@@ -284,14 +482,11 @@ function RecommendationsTab() {
             </div>
           </div>
 
-          {/* 참여자 열 */}
           {rec.participants && rec.participants.length > 0 && (
             <div style={{ width: 220, flex: "none", borderLeft: "1px solid var(--color-line)", paddingLeft: 28 }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 12 }}>참여자 응답</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {rec.participants.map((p) => (
-                  <ParticipantRow key={p.name} {...p} />
-                ))}
+                {rec.participants.map((p) => <ParticipantRow key={p.name} {...p} />)}
               </div>
             </div>
           )}
@@ -321,9 +516,7 @@ function RecommendationsTab() {
                   color: r.rank === 1 ? "#fff" : "var(--color-text-2)",
                   fontSize: 12, fontWeight: 800, padding: "5px 10px",
                   borderRadius: 999, flex: "none",
-                }}>
-                  {r.rank}순위
-                </span>
+                }}>{r.rank}순위</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>{r.when}</div>
                   <div style={{ fontSize: 12, marginTop: 3, color: "var(--color-text-2)" }}>
@@ -333,10 +526,8 @@ function RecommendationsTab() {
                     {r.note && <span style={{ color: "var(--color-maybe-text)", marginLeft: 6 }}>· {r.note}</span>}
                   </div>
                 </div>
-                {r.requiredSatisfied && (
-                  <span className="pill ok" style={{ height: 24, padding: "0 10px", fontSize: 11, flex: "none" }}>필수 OK</span>
-                )}
-                <span style={{ color: "var(--color-text-muted)", fontSize: 18 }}>›</span>
+                {r.requiredSatisfied && <span className="pill ok" style={{ height: 24, padding: "0 10px", fontSize: 11, flex: "none" }}>필수 OK</span>}
+                <span style={{ color: selected === r.rank ? "var(--color-primary)" : "var(--color-text-muted)", fontSize: 18, transition: "color 160ms, transform 160ms", transform: selected === r.rank ? "translateX(2px)" : "none" }}>›</span>
               </button>
             ))}
           </div>
@@ -345,17 +536,12 @@ function RecommendationsTab() {
 
       {/* RIGHT — 확정 패널 */}
       <aside style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        {/* 확정 CTA 카드 */}
         <div className="card tight" style={{ padding: 22, position: "relative", overflow: "hidden" }}>
           <span style={{ position: "absolute", left: 0, top: 18, bottom: 18, width: 3, borderRadius: 3, background: "var(--color-primary)" }} aria-hidden="true" />
           <div className="t-cap" style={{ fontWeight: 800, color: "var(--color-primary)", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>이 시간으로</div>
           <h3 style={{ margin: "4px 0 2px", fontSize: 20, fontWeight: 800, letterSpacing: "-0.025em" }}>{rec.time}</h3>
           <p className="t-cap" style={{ marginBottom: 14 }}>{rec.dateLabel}</p>
-          <Button
-            block primary
-            onClick={() => {}}
-            leftIcon={<Check size={18} color="#fff" stroke={2.5} />}
-          >
+          <Button block primary leftIcon={<Check size={18} color="#fff" stroke={2.5} />} onClick={() => {}}>
             이 시간으로 확정
           </Button>
           <button style={{ display: "block", width: "100%", marginTop: 8, background: "transparent", border: "none", color: "var(--color-text-2)", fontFamily: "inherit", fontSize: 13, padding: "6px 0", cursor: "pointer" }}>
@@ -363,7 +549,6 @@ function RecommendationsTab() {
           </button>
         </div>
 
-        {/* 모임 정보 */}
         <div className="card tight" style={{ padding: 22, position: "relative", overflow: "hidden" }}>
           <span style={{ position: "absolute", top: -20, right: -16, width: 70, height: 70, borderRadius: 999, background: "var(--color-lavender)", opacity: 0.5 }} aria-hidden="true" />
           <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 10 }}>모임 정보</div>
@@ -374,7 +559,7 @@ function RecommendationsTab() {
             {[
               { label: "조율 기간", value: "6.1 — 6.14" },
               { label: "예상 소요", value: "2시간" },
-              { label: "응답", value: "5/6명", color: "var(--color-primary)" },
+              { label: "응답",     value: "5/6명", color: "var(--color-primary)" },
               { label: "응답 마감", value: "5.30 (금)" },
             ].map(({ label, value, color }) => (
               <div key={label}>
@@ -385,17 +570,11 @@ function RecommendationsTab() {
           </div>
         </div>
 
-        {/* 필수 참석자 */}
         <div className="card tight" style={{ padding: 22 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 10 }}>필수 참석자</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
             {["소미", "지현"].map((p) => (
-              <span key={p} style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                padding: "6px 10px",
-                background: "var(--color-accent-soft)", color: "var(--color-accent)",
-                borderRadius: 999, fontSize: 12, fontWeight: 800,
-              }}>
+              <span key={p} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "var(--color-accent-soft)", color: "var(--color-accent)", borderRadius: 999, fontSize: 12, fontWeight: 800 }}>
                 <span style={{ width: 16, height: 16, borderRadius: 999, background: "var(--color-accent)", color: "#fff", fontSize: 9, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{p[0]}</span>
                 {p}
               </span>
@@ -408,60 +587,29 @@ function RecommendationsTab() {
   );
 }
 
-/* ══════════════════════════════════════════════════════ */
-/*  페이지                                                 */
-/* ══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   페이지
+══════════════════════════════════════════════════════ */
 export default function DashboardPage({ params }: { params: Promise<{ id: string }> }) {
   use(params);
   const [tab, setTab] = useState<Tab>("aggregate");
 
   return (
     <div style={{ minHeight: "100dvh", background: "var(--color-bg)" }}>
-      {/* Header */}
-      <header style={{
-        position: "sticky", top: 0, zIndex: 10,
-        background: "var(--color-surface)",
-        borderBottom: "1px solid var(--color-line)",
-        padding: "0 32px",
-      }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", gap: 24, height: 64 }}>
-          <Link href="/meetings"><Logo size={24} /></Link>
-          <div style={{ width: 1, height: 20, background: "var(--color-line)" }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.02em" }}>6월 전시 모임</span>
-            <span className="pill ok" style={{ marginLeft: 10, height: 22, fontSize: 11, padding: "0 8px" }}>응답 수집 중</span>
-          </div>
-          {/* 탭 */}
-          <nav style={{ display: "flex", gap: 2 }}>
-            {([
-              { key: "aggregate",       label: "응답 현황" },
-              { key: "recommendations", label: "추천 결과" },
-            ] as const).map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                style={{
-                  padding: "6px 16px", borderRadius: 8, border: "none",
-                  background: tab === key ? "var(--color-primary-soft)" : "transparent",
-                  color: tab === key ? "var(--color-primary)" : "var(--color-text-2)",
-                  fontFamily: "inherit", fontSize: 14, fontWeight: 700,
-                  letterSpacing: "-0.015em", cursor: "pointer",
-                  transition: "background 160ms, color 160ms",
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </header>
+      <AppHeader />
 
-      {/* 콘텐츠 */}
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 32px 48px" }}>
-        {tab === "aggregate"
-          ? <AggregateTab />
-          : <RecommendationsTab />
-        }
+      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 32px 96px" }}>
+        {/* 브레드크럼 */}
+        <div style={{ fontSize: 13, color: "var(--color-text-2)", letterSpacing: "-0.01em", marginBottom: 18 }}>
+          <Link href="/meetings" style={{ color: "var(--color-text-muted)", textDecoration: "none" }}>내 모임</Link>
+          <span style={{ margin: "0 6px", color: "var(--color-text-muted)" }}>›</span>
+          <span style={{ color: "var(--color-text)", fontWeight: 700 }}>6월 전시 모임</span>
+        </div>
+
+        <MeetingHero />
+        <PageTabs tab={tab} setTab={setTab} />
+
+        {tab === "aggregate" ? <AggregateTab /> : <RecommendationsTab />}
       </main>
     </div>
   );
