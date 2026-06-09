@@ -637,9 +637,13 @@ components:
         meetingId: { type: integer }
         title: { type: string }
         description: { type: [string, 'null'] }
+        category: { $ref: '#/components/schemas/MeetingCategory' }
         status: { $ref: '#/components/schemas/MeetingStatus' }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
+        durationHours: { type: integer }
+        availableStartTime: { type: string, description: 'HH:mm' }
+        availableEndTime: { type: string, description: 'HH:mm' }
         responseDeadline: { type: string, format: date-time }
     ParticipantRegistered:
       type: object

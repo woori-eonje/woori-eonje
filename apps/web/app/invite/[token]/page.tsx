@@ -1,99 +1,46 @@
-"use client";
+// 초대 진입 — 서버 컴포넌트에서 모임 공개 정보를 fetch(SSR)하고,
+// 닉네임 입력 등 인터랙션은 client 뷰(InviteJoinView)로 분리한다.
+import { Logo } from "@/components/primitives";
+import { ApiError } from "@/lib/api";
+import { fetchInvite, toInviteVM, type InviteVM } from "@/lib/invite";
+import { InviteJoinView } from "./InviteJoinView";
 
-import { useState, use } from "react";
-import { useRouter } from "next/navigation";
-import { Button, Logo } from "@/components/primitives";
-import { Calendar } from "@/components/icons";
+export default async function InviteJoinPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
 
-export default function InviteJoinPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
-  const router = useRouter();
-  const [name, setName] = useState("");
-  const valid = name.trim().length >= 2;
+  // fetch 실패만 잡는다(렌더 에러를 삼키지 않도록 JSX 반환은 try/catch 밖에서).
+  // 토큰 문제(invalid/expired)와 일시적 오류(네트워크/서버)를 구분한다.
+  let vm: InviteVM | null = null;
+  let errorKind: "expired" | "invalid" | "error" = "error";
+  try {
+    vm = toInviteVM(await fetchInvite(token));
+  } catch (e) {
+    if (e instanceof ApiError && e.code === "INVITE_TOKEN_EXPIRED") errorKind = "expired";
+    else if (e instanceof ApiError && e.code === "INVITE_TOKEN_INVALID") errorKind = "invalid";
+    else errorKind = "error";
+  }
 
-  const handleStart = () => {
-    if (!valid) return;
-    router.push(`/invite/${token}/time-select`);
-  };
+  if (vm) {
+    return <InviteJoinView token={token} vm={vm} />;
+  }
+
+  const errorText = {
+    expired: { title: "마감된 초대 링크예요", body: "응답이 마감되어 더 이상 참여할 수 없어요." },
+    invalid: { title: "유효하지 않은 초대 링크예요", body: "링크가 올바른지 다시 확인해 주세요." },
+    error: { title: "잠시 후 다시 시도해 주세요", body: "일시적인 오류로 모임 정보를 불러오지 못했어요." },
+  }[errorKind];
 
   return (
-    <div className="screen">
-      <div style={{ padding: "14px 20px", background: "var(--color-surface)", borderBottom: "1px solid var(--color-line)", display: "flex", alignItems: "center" }}>
-        <Logo size={24} />
-      </div>
-
-      <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 18 }}>
-        {/* Meeting info card */}
-        <div style={{
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-line)",
-          borderRadius: 20, padding: 20,
-          display: "flex", flexDirection: "column", gap: 14,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{
-              width: 44, height: 44, borderRadius: 14,
-              background: "var(--color-primary-soft)",
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <Calendar size={22} color="var(--color-primary)" />
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-primary)", letterSpacing: "0.04em" }}>친구 모임</div>
-              <h2 className="t-h2">6월 전시 모임</h2>
-            </div>
-          </div>
-
-          <p className="t-body2">6월 초에 전시 보러 갈 사람들 일정 조율</p>
-
-          <div className="divider" />
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>
-              <div className="t-cap">조율 기간</div>
-              <div className="t-body" style={{ fontWeight: 700 }}>6.1 — 6.14</div>
-            </div>
-            <div>
-              <div className="t-cap">예상 소요</div>
-              <div className="t-body" style={{ fontWeight: 700 }}>2시간</div>
-            </div>
-            <div>
-              <div className="t-cap">선택 시간대</div>
-              <div className="t-body2" style={{ fontWeight: 600 }}>평일 18–23 · 주말 12–20</div>
-            </div>
-            <div>
-              <div className="t-cap">응답 마감</div>
-              <div className="t-body" style={{ fontWeight: 700 }}>5.30 (금) 23:59</div>
-            </div>
+    <div className="screen white">
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--color-line)", display: "flex", alignItems: "center" }}>
+          <Logo size={24} />
+        </div>
+        <div className="scroll center" style={{ padding: "40px 20px" }}>
+          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 8, maxWidth: 320 }}>
+            <h2 className="t-h2">{errorText.title}</h2>
+            <p className="t-body2">{errorText.body}</p>
           </div>
         </div>
-
-        {/* Nickname input */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <label style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.015em" }}>
-            닉네임 <span style={{ color: "var(--color-accent)", fontWeight: 800 }}>*</span>
-          </label>
-          <input
-            className="input"
-            placeholder="단톡방에서 쓰는 이름이면 좋아요"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={12}
-            onKeyDown={(e) => e.key === "Enter" && handleStart()}
-          />
-          <div className="t-cap">2–12자 · 한글·영문·숫자</div>
-        </div>
-
-        <div style={{ fontSize: 12, color: "var(--color-text-2)", textAlign: "center", lineHeight: 1.6 }}>
-          닉네임만 입력하면 바로 참여할 수 있어요.<br />회원가입은 필요하지 않아요.
-        </div>
       </div>
-
-      <div className="bottom-bar">
-        <Button block primary onClick={handleStart} disabled={!valid}>
-          참여 시작
-        </Button>
-      </div>
-    </div>
-  );
+    );
 }

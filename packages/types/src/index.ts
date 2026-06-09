@@ -76,3 +76,24 @@ export interface ApiFailure {
 }
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+
+// ── API DTO: 초대 공개 정보 (GET /api/invites/{inviteToken}) ────
+// openapi.yaml 의 InvitePublic 스키마와 일치. FE·BE 공유.
+export interface InvitePublic {
+  meetingId: number;
+  title: string;
+  description: string | null;
+  category: MeetingCategory;
+  status: MeetingStatus;
+  /** YYYY-MM-DD */
+  startDate: string;
+  /** YYYY-MM-DD */
+  endDate: string;
+  durationHours: number;
+  /** HH:mm */
+  availableStartTime: string;
+  /** HH:mm */
+  availableEndTime: string;
+  /** ISO 8601 date-time */
+  responseDeadline: string;
+}

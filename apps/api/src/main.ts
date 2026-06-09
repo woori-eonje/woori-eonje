@@ -4,6 +4,10 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // 계약(openapi.yaml) 경로가 모두 /api/... 이므로 전역 prefix 부여
+  app.setGlobalPrefix('api');
+  // web(Next.js) 개발 서버에서의 호출 허용
+  app.enableCors({ origin: 'http://localhost:3000', credentials: true });
   // web(Next.js)이 3000을 쓰므로 api 기본 포트는 3001로 분리
   await app.listen(process.env.PORT ?? 3001);
 }
