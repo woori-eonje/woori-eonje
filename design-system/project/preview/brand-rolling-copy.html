@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8" />
+<link rel="stylesheet" href="_card.css" />
+<style>body{min-height:200px}</style>
+</head>
+<body>
+<div class="card">
+
+<style>
+.rc{display:flex;align-items:baseline;gap:6px;font-size:42px;font-weight:900;letter-spacing:-0.04em}
+.rc .static{color:#333}
+.rc .roll{color:#1A9562;position:relative;display:inline-block;min-width:140px}
+.rc .roll span{display:block;animation:roll 9s steps(1) infinite}
+@keyframes roll{
+  0%,30%{transform:translateY(0)}
+  33%,63%{transform:translateY(-1.1em)}
+  66%,96%{transform:translateY(-2.2em)}
+  100%{transform:translateY(0)}
+}
+.rc .roll .stack{display:inline-block}
+.poppy{color:#FF6B6B}
+</style>
+<div class="rc">
+  <span class="static">우리 언제</span>
+  <span class="roll"><span class="stack">만날까<span class="poppy">?</span><br/>떠나지<span class="poppy">?</span><br/>회의해<span class="poppy">?</span></span></span>
+</div>
+<div class="meta">Hero rolling copy — the brand's one allowed animation. 3-second hold, instant cut, 9s loop.</div>
+
+</div>
+</body>
+</html>

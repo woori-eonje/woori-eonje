@@ -29,5 +29,8 @@ coverage/
 .vscode/*
 !.vscode/extensions.json
 
+# Claude Code (개인 설정은 공유 안 함, settings.json은 공유)
+.claude/settings.local.json
+
 # prisma
 apps/api/prisma/*.db

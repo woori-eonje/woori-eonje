@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>우리 언제? · Desktop UI Kit</title>
+  <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <!-- Reuse Icons from the mobile primitives (it doesn't depend on
+       mobile-only CSS classes). -->
+  <script type="text/babel" src="../mobile/Primitives.jsx"></script>
+  <script type="text/babel" src="TimeAggregate.jsx"></script>
+  <script type="text/babel" src="RecommendationsDesktop.jsx"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    function AppHeader({ tab }) {
+      return (
+        <header className="app-header">
+          <div className="brand">
+            <img src="../../assets/logo.svg" alt="우리 언제?" style={{ height: 24 }}/>
+          </div>
+          <nav>
+            <a className={tab === "myMeetings" ? "active" : ""}>내 모임</a>
+            <a className={tab === "members" ? "active" : ""}>참여자</a>
+            <a className={tab === "settings" ? "active" : ""}>설정</a>
+          </nav>
+          <span className="spacer" />
+          <button className="btn-mini">
+            <Icons.PlusCircle size={14} color="#fff" /> 새 모임
+          </button>
+          <span className="avatar">소</span>
+        </header>
+      );
+    }
+
+    function App() {
+      const [view, setView] = useState("aggregate");
+
+      return (
+        <div className="app">
+          <AppHeader tab="myMeetings" />
+
+          <main className="page">
+            {/* Crumbs */}
+            <div className="page-header">
+              <div>
+                <div className="crumbs">
+                  <span style={{ color: "var(--color-text-muted)" }}>내 모임</span>
+                  <span style={{ margin: "0 6px", color: "var(--color-text-muted)" }}>›</span>
+                  <span style={{ color: "var(--color-text)", fontWeight: 700 }}>6월 전시 모임</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Meeting hero — warm, friendly, with a Baby Blue side wash */}
+            <div className="meeting-hero">
+              {/* Decorative pastel shapes inside the accent */}
+              <svg width="44" height="34" viewBox="0 0 64 48" style={{ position: "absolute", top: 22, right: 30, opacity: 0.95, zIndex: 1 }} aria-hidden="true">
+                <path d="M0 48 Q0 0 32 0 Q64 0 64 48 Z" fill="#1A9562"/>
+                <circle cx="24" cy="22" r="2" fill="#fff"/><circle cx="40" cy="22" r="2" fill="#fff"/>
+                <path d="M24 30 Q32 36 40 30" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round"/>
+              </svg>
+              <svg width="50" height="40" viewBox="0 0 76 62" style={{ position: "absolute", bottom: 12, right: 100, zIndex: 1 }} aria-hidden="true">
+                <g fill="#E6DBF7"><circle cx="14" cy="36" r="14"/><circle cx="30" cy="20" r="14"/><circle cx="48" cy="18" r="16"/><circle cx="62" cy="36" r="14"/><circle cx="38" cy="46" r="16"/></g>
+              </svg>
+
+              <div className="accent" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="kicker">친구 모임</div>
+                <h1>6월 전시 모임</h1>
+                <div className="sub">6월 초에 전시 보러 갈 사람들 일정 조율</div>
+                <div className="stats">
+                  <span className="stat">조율 기간 <b>6.1 — 6.14</b></span>
+                  <span className="stat">예상 소요 <b>2시간</b></span>
+                  <span className="stat">응답 <b style={{ color: "var(--color-primary)" }}>5/6명</b></span>
+                  <span className="stat">마감까지 <b>2일 6시간</b></span>
+                </div>
+              </div>
+
+              <div className="actions">
+                <span className="pill ok"><span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--color-primary)" }} /> 응답 수집 중</span>
+                <button className="btn outline">
+                  <Icons.Copy size={16} color="var(--color-primary)" /> 링크 복사
+                </button>
+                <button className="btn primary">
+                  <Icons.Share size={16} color="#fff" /> 공유
+                </button>
+              </div>
+            </div>
+
+            {/* Page tab switcher */}
+            <div className="page-tabs" style={{ marginBottom: 24 }}>
+              <button className={view === "aggregate" ? "on" : ""} onClick={() => setView("aggregate")}>
+                <Icons.Clock size={16} color={view === "aggregate" ? "var(--color-primary)" : "var(--color-text-2)"} />
+                응답 현황
+              </button>
+              <button className={view === "recs" ? "on" : ""} onClick={() => setView("recs")}>
+                <Icons.Sparkle size={16} color={view === "recs" ? "var(--color-primary)" : "var(--color-text-2)"} />
+                추천 결과
+              </button>
+            </div>
+
+            {view === "aggregate" ? <TimeAggregate /> : <RecommendationsDesktop />}
+          </main>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

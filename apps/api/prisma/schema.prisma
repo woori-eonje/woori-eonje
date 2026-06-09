@@ -1,0 +1,173 @@
+// 우리 언제? — 데이터 모델 (기획서 23장 기준)
+// 도메인 규칙: docs/domain.md / plan/whenwe_plan_v0.3.pdf
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Prisma 7: 연결 URL은 schema가 아니라 prisma.config.ts 에서 관리한다.
+}
+
+// ── Enums (값은 @whenwe/types 와 일치) ──────────────────────────
+
+enum MeetingCategory {
+  FRIEND
+  STUDY
+  BUSINESS
+}
+
+enum MeetingStatus {
+  DRAFT
+  COLLECTING
+  READY_TO_CONFIRM
+  CONFIRMED
+  CLOSED
+}
+
+enum ParticipantType {
+  MEMBER
+  GUEST
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  MAYBE
+  UNAVAILABLE
+}
+
+// ── Models ─────────────────────────────────────────────────────
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  nickname  String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  ownedMeetings  Meeting[]     @relation("MeetingOwner")
+  participations Participant[]
+
+  @@map("users")
+}
+
+model Meeting {
+  id                   Int             @id @default(autoincrement())
+  ownerId              Int             @map("owner_id")
+  title                String
+  description          String?
+  category             MeetingCategory
+  status               MeetingStatus   @default(DRAFT)
+  startDate            DateTime        @map("start_date") @db.Date
+  endDate              DateTime        @map("end_date") @db.Date
+  availableStartTime   String          @map("available_start_time") // "HH:mm"
+  availableEndTime     String          @map("available_end_time") //   "HH:mm"
+  durationHours        Int             @map("duration_hours")
+  responseDeadline     DateTime        @map("response_deadline")
+  inviteToken          String          @unique @map("invite_token")
+  inviteTokenExpiresAt DateTime?       @map("invite_token_expires_at")
+  confirmedStartAt     DateTime?       @map("confirmed_start_at")
+  confirmedEndAt       DateTime?       @map("confirmed_end_at")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  owner           User                      @relation("MeetingOwner", fields: [ownerId], references: [id])
+  participants    Participant[]
+  slots           AvailabilitySlot[]
+  availabilities  ParticipantAvailability[]
+  recommendations RecommendationResult[]
+  stateLogs       MeetingStateLog[]
+
+  @@index([ownerId])
+  @@index([status, responseDeadline]) // 스케줄러 조회용
+  @@map("meetings")
+}
+
+model Participant {
+  id              Int             @id @default(autoincrement())
+  meetingId       Int             @map("meeting_id")
+  userId          Int?            @map("user_id") // 비회원이면 null
+  guestName       String          @map("guest_name")
+  participantType ParticipantType @map("participant_type")
+  editToken       String?         @unique @map("edit_token") // 비회원 응답 수정용
+  isRequired      Boolean         @default(false) @map("is_required")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  meeting        Meeting                   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user           User?                     @relation(fields: [userId], references: [id])
+  availabilities ParticipantAvailability[]
+
+  @@index([meetingId])
+  @@map("participants")
+}
+
+model AvailabilitySlot {
+  id          Int      @id @default(autoincrement())
+  meetingId   Int      @map("meeting_id")
+  slotStartAt DateTime @map("slot_start_at")
+  slotEndAt   DateTime @map("slot_end_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  meeting        Meeting                   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  availabilities ParticipantAvailability[]
+
+  @@unique([meetingId, slotStartAt]) // 슬롯 중복 방지
+  @@index([meetingId, slotStartAt])
+  @@map("availability_slots")
+}
+
+model ParticipantAvailability {
+  id                 Int                @id @default(autoincrement())
+  meetingId          Int                @map("meeting_id")
+  participantId      Int                @map("participant_id")
+  slotId             Int                @map("slot_id")
+  availabilityStatus AvailabilityStatus @map("availability_status")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  meeting     Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  participant Participant      @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  slot        AvailabilitySlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, slotId]) // 같은 참여자·슬롯 재제출은 update
+  @@index([meetingId])
+  @@map("participant_availability")
+}
+
+model RecommendationResult {
+  id                       Int      @id @default(autoincrement())
+  meetingId                Int      @map("meeting_id")
+  rank                     Int
+  startAt                  DateTime @map("start_at")
+  endAt                    DateTime @map("end_at")
+  availableCount           Int      @map("available_count")
+  maybeCount               Int      @map("maybe_count")
+  unavailableCount         Int      @map("unavailable_count")
+  requiredAvailableCount   Int      @map("required_available_count")
+  requiredMaybeCount       Int      @map("required_maybe_count")
+  requiredUnavailableCount Int      @map("required_unavailable_count")
+  score                    Int // 가능 슬롯 점수 합 (가능2/애매1/불가0)
+  createdAt                DateTime @default(now()) @map("created_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, rank])
+  @@index([meetingId, rank])
+  @@map("recommendation_results")
+}
+
+model MeetingStateLog {
+  id             Int            @id @default(autoincrement())
+  meetingId      Int            @map("meeting_id")
+  previousStatus MeetingStatus? @map("previous_status")
+  nextStatus     MeetingStatus  @map("next_status")
+  reason         String?
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@map("meeting_state_logs")
+}
