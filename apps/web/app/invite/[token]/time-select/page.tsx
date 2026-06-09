@@ -1,91 +1,135 @@
 "use client";
 
-import { useState, useMemo, use } from "react";
+import { useState, useMemo, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar, Button } from "@/components/primitives";
 import { DateTab } from "@/components/time-select/DateTab";
 import { TimeSlot } from "@/components/time-select/TimeSlot";
 import { ModeToggle } from "@/components/time-select/ModeToggle";
-import type { SlotState, Picks } from "@/types/meeting";
-
-const DATES = [
-  { id: "6.4", label: "6.4", weekday: "목" },
-  { id: "6.5", label: "6.5", weekday: "금" },
-  { id: "6.6", label: "6.6", weekday: "토" },
-  { id: "6.7", label: "6.7", weekday: "일" },
-  { id: "6.8", label: "6.8", weekday: "월" },
-  { id: "6.9", label: "6.9", weekday: "화" },
-];
-const TIMES = [
-  "오후 6:00","오후 6:30","오후 7:00","오후 7:30","오후 8:00",
-  "오후 8:30","오후 9:00","오후 9:30","오후 10:00","오후 10:30",
-];
+import type { SlotState } from "@/types/meeting";
+import { ApiError } from "@/lib/api";
+import { fetchInvite, toInviteVM, type InviteVM } from "@/lib/invite";
+import { loadParticipant, type StoredParticipant } from "@/lib/participant";
+import {
+  fetchSlots,
+  fetchMyPicks,
+  submitAvailability,
+  type DayGroup,
+} from "@/lib/availability";
 
 export default function TimeSelectPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
   const router = useRouter();
-  const [activeDate, setActiveDate] = useState("6.6");
+
+  const [vm, setVm] = useState<InviteVM | null>(null);
+  const [participant, setParticipant] = useState<StoredParticipant | null>(null);
+  const [days, setDays] = useState<DayGroup[]>([]);
+  const [activeDate, setActiveDate] = useState<string>("");
   const [mode, setMode] = useState<SlotState>("available");
-  const [picks, setPicks] = useState<Picks>({
-    "6.6": { "오후 7:00": "available", "오후 7:30": "available", "오후 8:00": "available", "오후 8:30": "maybe" },
-    "6.5": { "오후 9:00": "available" },
-  });
+  const [picks, setPicks] = useState<Record<number, SlotState>>({});
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const p = loadParticipant(token);
+    if (!p) {
+      // 등록 안 한 브라우저면 초대 진입으로 되돌림
+      router.replace(`/invite/${token}`);
+      return;
+    }
+    (async () => {
+      try {
+        const invite = toInviteVM(await fetchInvite(token));
+        const [dayGroups, myPicks] = await Promise.all([
+          fetchSlots(invite.meetingId),
+          fetchMyPicks(invite.meetingId, p.editToken),
+        ]);
+        setParticipant(p);
+        setVm(invite);
+        setDays(dayGroups);
+        setActiveDate(dayGroups[0]?.dateKey ?? "");
+        setPicks(myPicks);
+      } catch {
+        setError("시간 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [token, router]);
 
   const summary = useMemo(() => {
     let ok = 0, m = 0, x = 0;
-    Object.values(picks).forEach((o) => {
-      Object.values(o).forEach((s) => {
-        if (s === "available") ok++;
-        else if (s === "maybe") m++;
-        else if (s === "unavail") x++;
-      });
+    Object.values(picks).forEach((s) => {
+      if (s === "available") ok++;
+      else if (s === "maybe") m++;
+      else if (s === "unavail") x++;
     });
     return { ok, m, x, total: ok + m + x };
   }, [picks]);
 
-  const dayCount = (id: string) =>
-    Object.keys(picks[id] || {}).filter((t) => picks[id][t]).length;
+  const activeDay = days.find((d) => d.dateKey === activeDate);
 
-  const onTapSlot = (time: string) => {
-    setPicks((prev) => {
-      const day = { ...(prev[activeDate] || {}) };
-      if (day[time] === mode) delete day[time];
-      else day[time] = mode;
-      return { ...prev, [activeDate]: day };
-    });
+  const dayCount = (dateKey: string) => {
+    const d = days.find((g) => g.dateKey === dateKey);
+    if (!d) return 0;
+    return d.slots.filter((s) => picks[s.slotId]).length;
   };
 
-  const onQuick = (kind: string) => {
+  const onTapSlot = (slotId: number) => {
     setPicks((prev) => {
       const next = { ...prev };
-      if (kind === "reset") return {};
-      if (kind === "clear-day") {
-        const n = { ...prev };
-        delete n[activeDate];
-        return n;
-      }
-      if (kind === "weekday-evening") {
-        ["6.4","6.5","6.8","6.9"].forEach((id) => {
-          next[id] = { ...(next[id] || {}), "오후 7:00":"available","오후 7:30":"available","오후 8:00":"available" };
-        });
-      }
-      if (kind === "weekend-afternoon") {
-        ["6.6","6.7"].forEach((id) => {
-          next[id] = { ...(next[id] || {}), "오후 6:00":"available","오후 6:30":"available","오후 7:00":"available" };
-        });
-      }
+      if (next[slotId] === mode) delete next[slotId];
+      else next[slotId] = mode;
       return next;
     });
   };
 
-  const handleSubmit = () => {
-    router.push(`/invite/${token}/submitted`);
+  const onQuick = (kind: "reset" | "clear-day" | "weekday" | "weekend") => {
+    setPicks((prev) => {
+      if (kind === "reset") return {};
+      const next = { ...prev };
+      if (kind === "clear-day") {
+        activeDay?.slots.forEach((s) => delete next[s.slotId]);
+        return next;
+      }
+      const wantWeekend = kind === "weekend";
+      days
+        .filter((d) => d.weekend === wantWeekend)
+        .forEach((d) => d.slots.forEach((s) => (next[s.slotId] = "available")));
+      return next;
+    });
   };
+
+  const handleSubmit = async () => {
+    if (summary.total === 0 || submitting || !vm || !participant) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await submitAvailability(vm.meetingId, participant.editToken, participant.participantId, picks);
+      router.push(`/invite/${token}/submitted`);
+    } catch (e) {
+      setError(
+        e instanceof ApiError ? e.message : "제출에 실패했어요. 잠시 후 다시 시도해 주세요.",
+      );
+      setSubmitting(false);
+    }
+  };
+
+  if (loading || !vm) {
+    return (
+      <div className="screen white">
+        <div className="scroll center">
+          <p className="t-body2">{error ?? "불러오는 중…"}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="screen">
       <TopBar
-        title="6월 전시 모임"
+        title={vm.title}
         onBack={() => router.back()}
         right={<span className="pill ok" style={{ marginRight: 12 }}>● 응답 수집 중</span>}
       />
@@ -98,8 +142,8 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
         display: "flex", flexDirection: "column", gap: 6,
       }}>
         <div className="t-body2" style={{ color: "var(--color-text-2)" }}>
-          6.1 – 6.14 · 예상 <b style={{ color: "var(--color-text)" }}>2시간</b> · 마감{" "}
-          <b style={{ color: "var(--color-text)" }}>5.30 (금) 23:59</b>
+          {vm.periodLabel} · 예상 <b style={{ color: "var(--color-text)" }}>{vm.durationLabel}</b> · 마감{" "}
+          <b style={{ color: "var(--color-text)" }}>{vm.deadlineLabel}</b>
         </div>
         <div className="t-cap">비회원 참여 중 · 응답 마감일까지 수정할 수 있어요</div>
       </div>
@@ -110,13 +154,13 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
         background: "var(--color-surface)",
         borderBottom: "1px solid var(--color-line)",
       }}>
-        {DATES.map((d) => (
+        {days.map((d) => (
           <DateTab
-            key={d.id}
+            key={d.dateKey}
             label={d.label} weekday={d.weekday}
-            active={activeDate === d.id}
-            count={dayCount(d.id)}
-            onClick={() => setActiveDate(d.id)}
+            active={activeDate === d.dateKey}
+            count={dayCount(d.dateKey)}
+            onClick={() => setActiveDate(d.dateKey)}
           />
         ))}
       </div>
@@ -129,11 +173,11 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekday-evening")}>
-            평일 저녁 가능
+          <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekday")}>
+            평일 전체 가능
           </button>
-          <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekend-afternoon")}>
-            주말 오후 가능
+          <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekend")}>
+            주말 전체 가능
           </button>
           <button className="chip danger" style={{ justifyContent: "center" }} onClick={() => onQuick("reset")}>
             전체 초기화
@@ -146,12 +190,12 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
         <div className="divider" />
 
         <div className="slot-grid">
-          {TIMES.map((t) => (
+          {activeDay?.slots.map((s) => (
             <TimeSlot
-              key={t}
-              time={t}
-              state={picks[activeDate]?.[t] ?? null}
-              onTap={() => onTapSlot(t)}
+              key={s.slotId}
+              time={s.timeLabel}
+              state={picks[s.slotId] ?? null}
+              onTap={() => onTapSlot(s.slotId)}
             />
           ))}
         </div>
@@ -159,12 +203,15 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
 
       {/* Sticky bottom CTA */}
       <div className="bottom-bar">
+        {error && (
+          <div className="t-cap" style={{ color: "var(--color-error)", fontWeight: 600 }}>{error}</div>
+        )}
         <div className="summary">
           <span>선택한 시간 <b>{summary.total}개</b></span>
           <span>가능 {summary.ok} · 애매 {summary.m} · 불가 {summary.x}</span>
         </div>
-        <Button block primary onClick={handleSubmit} disabled={summary.total === 0}>
-          제출하기
+        <Button block primary onClick={handleSubmit} disabled={summary.total === 0 || submitting}>
+          {submitting ? "제출 중…" : "제출하기"}
         </Button>
       </div>
     </div>

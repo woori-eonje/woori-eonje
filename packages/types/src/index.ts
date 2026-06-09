@@ -109,3 +109,38 @@ export interface ParticipantRegistered {
   /** 비회원 응답 수정용 토큰 — 클라이언트(localStorage)에 저장 */
   participantEditToken: string;
 }
+
+// ── API DTO: 슬롯 / 가능시간 제출 (GET slots, POST availability) ────
+export interface Slot {
+  slotId: number;
+  /** ISO 8601 date-time */
+  startAt: string;
+  /** ISO 8601 date-time */
+  endAt: string;
+}
+
+export interface SlotsResponse {
+  meetingId: number;
+  slots: Slot[];
+}
+
+export interface AvailabilityItem {
+  slotId: number;
+  status: AvailabilityStatus;
+}
+
+export interface SubmitAvailabilityRequest {
+  participantId: number;
+  items: AvailabilityItem[];
+}
+
+export interface SubmitAvailabilityResponse {
+  saved: boolean;
+  updatedRecommendation: boolean;
+}
+
+export interface MyAvailability {
+  participantId: number;
+  guestName: string;
+  items: AvailabilityItem[];
+}

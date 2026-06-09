@@ -15,6 +15,7 @@ const CATEGORY_LABEL: Record<MeetingCategory, string> = {
 };
 
 export interface InviteVM {
+  meetingId: number;
   categoryLabel: string;
   title: string;
   description: string | null;
@@ -36,6 +37,7 @@ function monthDay(ymd: string): string {
 
 export function toInviteVM(dto: InvitePublic): InviteVM {
   return {
+    meetingId: dto.meetingId,
     categoryLabel: CATEGORY_LABEL[dto.category],
     title: dto.title,
     description: dto.description,

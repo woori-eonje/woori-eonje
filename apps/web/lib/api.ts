@@ -33,14 +33,18 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   return body.data;
 }
 
-export function apiGet<T>(path: string): Promise<T> {
-  return request<T>(path, {});
+export function apiGet<T>(path: string, headers?: Record<string, string>): Promise<T> {
+  return request<T>(path, { headers });
 }
 
-export function apiPost<T>(path: string, body: unknown): Promise<T> {
+export function apiPost<T>(
+  path: string,
+  body: unknown,
+  headers?: Record<string, string>,
+): Promise<T> {
   return request<T>(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
 }

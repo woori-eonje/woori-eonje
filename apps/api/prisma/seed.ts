@@ -58,7 +58,38 @@ async function main(): Promise<void> {
     },
   });
 
-  console.log('seed ok:', { ownerId: owner.id, meetingId: meeting.id });
+  // ── availability_slots 생성 (멱등: 기존 모임 슬롯 삭제 후 재생성) ──
+  // 기간 startDate..endDate(양끝 포함), 매일 18:00~23:00 를 1시간 슬롯으로 쪼갬.
+  // → 하루 5슬롯(18,19,20,21,22시 시작, 각 1h), 14일 = 70슬롯.
+  // new Date('2026-06-01T18:00:00') 는 로컬(KST) 시각으로 해석된다.
+  await prisma.availabilitySlot.deleteMany({ where: { meetingId: meeting.id } });
+
+  const [startHour] = meeting.availableStartTime.split(':').map(Number); // 18
+  const [endHour] = meeting.availableEndTime.split(':').map(Number); //     23
+
+  const slots: { meetingId: number; slotStartAt: Date; slotEndAt: Date }[] = [];
+  const day = new Date(meeting.startDate);
+  const lastDay = new Date(meeting.endDate);
+  while (day.getTime() <= lastDay.getTime()) {
+    const y = day.getFullYear();
+    const m = String(day.getMonth() + 1).padStart(2, '0');
+    const d = String(day.getDate()).padStart(2, '0');
+    for (let hour = startHour; hour < endHour; hour++) {
+      const hh = String(hour).padStart(2, '0');
+      const slotStartAt = new Date(`${y}-${m}-${d}T${hh}:00:00`);
+      const slotEndAt = new Date(slotStartAt.getTime() + 60 * 60 * 1000);
+      slots.push({ meetingId: meeting.id, slotStartAt, slotEndAt });
+    }
+    day.setDate(day.getDate() + 1);
+  }
+
+  await prisma.availabilitySlot.createMany({ data: slots });
+
+  console.log('seed ok:', {
+    ownerId: owner.id,
+    meetingId: meeting.id,
+    slotCount: slots.length,
+  });
 }
 
 main()
