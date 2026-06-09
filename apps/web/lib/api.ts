@@ -15,10 +15,10 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+async function request<T>(path: string, init: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+    res = await fetch(`${API_BASE}${path}`, { cache: "no-store", ...init });
   } catch {
     throw new ApiError("NETWORK_ERROR", "서버에 연결할 수 없어요.", 0);
   }
@@ -31,4 +31,16 @@ export async function apiGet<T>(path: string): Promise<T> {
     throw new ApiError(body.error.code, body.error.message, res.status);
   }
   return body.data;
+}
+
+export function apiGet<T>(path: string): Promise<T> {
+  return request<T>(path, {});
+}
+
+export function apiPost<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }

@@ -302,7 +302,7 @@ paths:
               type: object
               required: [guestName]
               properties:
-                guestName: { type: string, minLength: 1, maxLength: 30 }
+                guestName: { type: string, minLength: 2, maxLength: 12 }
       responses:
         '201':
           description: 등록 성공

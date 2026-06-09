@@ -1,5 +1,9 @@
-import { Controller, Get, Param } from '@nestjs/common';
-import type { InvitePublic } from '@whenwe/types';
+import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
+import type {
+  InvitePublic,
+  ParticipantRegistered,
+  RegisterParticipantRequest,
+} from '@whenwe/types';
 import { InvitesService } from './invites.service';
 
 @Controller('invites')
@@ -10,5 +14,15 @@ export class InvitesController {
   @Get(':inviteToken')
   getInvite(@Param('inviteToken') inviteToken: string): Promise<InvitePublic> {
     return this.invitesService.getInvite(inviteToken);
+  }
+
+  // POST /api/invites/:inviteToken/participants — 비회원 참여자 등록 + edit token 발급 (인증 불필요)
+  @Post(':inviteToken/participants')
+  @HttpCode(201)
+  registerParticipant(
+    @Param('inviteToken') inviteToken: string,
+    @Body() body: RegisterParticipantRequest,
+  ): Promise<ParticipantRegistered> {
+    return this.invitesService.registerParticipant(inviteToken, body);
   }
 }

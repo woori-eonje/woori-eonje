@@ -4,16 +4,42 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Logo } from "@/components/primitives";
 import { Calendar } from "@/components/icons";
+import { ApiError } from "@/lib/api";
 import type { InviteVM } from "@/lib/invite";
+import { registerParticipant, saveParticipant, loadParticipant } from "@/lib/participant";
 
 export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const valid = name.trim().length >= 2;
 
-  const handleStart = () => {
-    if (!valid) return;
-    router.push(`/invite/${token}/time-select`);
+  const handleStart = async () => {
+    if (!valid || submitting) return;
+
+    // 이미 이 모임에 참여한 브라우저면(edit_token 보유) 재등록하지 않고 이동(중복 참여 방지).
+    if (loadParticipant(token)) {
+      router.push(`/invite/${token}/time-select`);
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await registerParticipant(token, name.trim());
+      saveParticipant(token, {
+        participantId: res.participantId,
+        editToken: res.participantEditToken,
+        guestName: res.guestName,
+      });
+      router.push(`/invite/${token}/time-select`);
+    } catch (e) {
+      setError(
+        e instanceof ApiError ? e.message : "참여에 실패했어요. 잠시 후 다시 시도해 주세요.",
+      );
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -82,6 +108,11 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
             onKeyDown={(e) => e.key === "Enter" && handleStart()}
           />
           <div className="t-cap">2–12자 · 한글·영문·숫자</div>
+          {error && (
+            <div className="t-cap" style={{ color: "var(--color-error)", fontWeight: 600 }}>
+              {error}
+            </div>
+          )}
         </div>
 
         <div style={{ fontSize: 12, color: "var(--color-text-2)", textAlign: "center", lineHeight: 1.6 }}>
@@ -90,8 +121,8 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
       </div>
 
       <div className="bottom-bar">
-        <Button block primary onClick={handleStart} disabled={!valid}>
-          참여 시작
+        <Button block primary onClick={handleStart} disabled={!valid || submitting}>
+          {submitting ? "참여 중..." : "참여 시작"}
         </Button>
       </div>
     </div>

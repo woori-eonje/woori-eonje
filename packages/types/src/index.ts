@@ -97,3 +97,15 @@ export interface InvitePublic {
   /** ISO 8601 date-time */
   responseDeadline: string;
 }
+
+// ── API DTO: 비회원 참여자 등록 (POST /api/invites/{inviteToken}/participants)
+export interface RegisterParticipantRequest {
+  guestName: string;
+}
+
+export interface ParticipantRegistered {
+  participantId: number;
+  guestName: string;
+  /** 비회원 응답 수정용 토큰 — 클라이언트(localStorage)에 저장 */
+  participantEditToken: string;
+}
