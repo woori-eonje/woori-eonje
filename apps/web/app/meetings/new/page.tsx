@@ -1,0 +1,401 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { TopBar, Button } from "@/components/primitives";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Users, BookOpen, Briefcase, Copy, Share } from "@/components/icons";
+
+const STEPS = [
+  { id: 1, label: "모임 정보",  q: "어떤 모임인가요?" },
+  { id: 2, label: "기간",       q: "언제 사이에서 고를까요?" },
+  { id: 3, label: "소요 시간",  q: "얼마나 만날 예정인가요?" },
+  { id: 4, label: "초대",       q: "초대 링크를 공유해요" },
+  { id: 5, label: "완료",       q: "응답을 기다리고 있어요" },
+];
+
+function StepBar({ current }: { current: number }) {
+  const s = STEPS.find((x) => x.id === current)!;
+  const pct = (current / STEPS.length) * 100;
+  return (
+    <div style={{ padding: "12px 20px 14px", background: "var(--color-surface)", borderBottom: "1px solid var(--color-line)" }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8, gap: 8 }}>
+        <div style={{ display: "inline-flex", alignItems: "baseline", gap: 8, minWidth: 0 }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", letterSpacing: "0.04em", textTransform: "uppercase" as const, whiteSpace: "nowrap" as const }}>
+            Step {current} / {STEPS.length}
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text)", letterSpacing: "-0.02em", whiteSpace: "nowrap" as const }}>
+            {s.label}
+          </span>
+        </div>
+        <span className="t-cap">{Math.round(pct)}%</span>
+      </div>
+      <div style={{ height: 4, background: "var(--color-bg-2)", borderRadius: 999, overflow: "hidden" }}>
+        <div style={{
+          width: `${pct}%`, height: "100%",
+          background: "var(--color-primary)", borderRadius: 999,
+          transition: "width 320ms cubic-bezier(.22,1,.36,1)",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+function Section({ q, helper, sub, children }: {
+  q: string; helper?: string; sub?: boolean; children?: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: sub ? 12 : 16 }}>
+      <div>
+        <h2 style={{
+          margin: 0,
+          fontSize: sub ? 16 : 24, fontWeight: sub ? 700 : 800,
+          letterSpacing: sub ? "-0.02em" : "-0.035em",
+          lineHeight: 1.3,
+          color: sub ? "var(--color-text-2)" : "var(--color-text)",
+        }}>
+          {q}
+        </h2>
+        {helper && <p className="t-body2" style={{ marginTop: 6 }}>{helper}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+interface OptionCardProps {
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  active: boolean;
+  onClick: () => void;
+}
+function OptionCard({ icon, title, subtitle, active, onClick }: OptionCardProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: "100%", textAlign: "left",
+        background: active ? "var(--color-primary-soft)" : "var(--color-surface)",
+        border: active ? "1.5px solid var(--color-primary)" : "1px solid var(--color-line)",
+        borderRadius: 14, padding: "11px 14px",
+        display: "flex", alignItems: "center", gap: 12,
+        fontFamily: "inherit", cursor: "pointer",
+        transition: "background 160ms, border-color 160ms",
+      }}
+    >
+      <span style={{
+        width: 32, height: 32, borderRadius: 10, flex: "none",
+        background: active ? "#fff" : "var(--color-bg)",
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        color: active ? "var(--color-primary)" : "var(--color-text)",
+      }}>
+        {icon}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 14, fontWeight: 700, letterSpacing: "-0.015em", color: active ? "var(--color-primary)" : "var(--color-text)" }}>
+          {title}
+        </span>
+        {subtitle && <span style={{ display: "block", fontSize: 12, color: "var(--color-text-2)", marginTop: 1 }}>{subtitle}</span>}
+      </span>
+      <span style={{
+        width: 18, height: 18, borderRadius: 999,
+        border: active ? "0" : "1.5px solid var(--color-line-strong)",
+        background: active ? "var(--color-primary)" : "transparent",
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        color: "#fff", fontSize: 10, fontWeight: 800,
+      }}>
+        {active ? "✓" : ""}
+      </span>
+    </button>
+  );
+}
+
+/* ── Duration quick-select ── */
+const DURATIONS = ["1시간", "1.5시간", "2시간", "3시간", "4시간+"];
+const TIME_RANGES = [
+  { id: "weekday-eve", label: "평일 저녁", sub: "18:00 – 23:00" },
+  { id: "weekday-day", label: "평일 낮",   sub: "09:00 – 18:00" },
+  { id: "weekend",     label: "주말 전체", sub: "09:00 – 22:00" },
+  { id: "custom",      label: "직접 설정", sub: "시작 ~ 종료 입력" },
+];
+
+interface WizardData {
+  name: string; desc: string; kind: string;
+  from?: Date; to?: Date; due?: Date;
+  duration: string; range: string;
+}
+
+export default function WizardPage() {
+  const router = useRouter();
+  const [step, setStep] = useState(1);
+  const [data, setData] = useState<WizardData>({
+    name: "", desc: "", kind: "",
+    from: undefined, to: undefined, due: undefined,
+    duration: "", range: "",
+  });
+  const [copied, setCopied] = useState(false);
+
+  const set = (patch: Partial<WizardData>) => setData((d) => ({ ...d, ...patch }));
+  const next = () => setStep((s) => Math.min(s + 1, 5));
+
+  const handleCopy = () => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="screen">
+      <TopBar
+        title="새 모임 만들기"
+        onBack={step === 1 ? () => router.back() : () => setStep((s) => s - 1)}
+      />
+      <StepBar current={step} />
+
+      {/* Step 1 */}
+      {step === 1 && (
+        <>
+          <div className="scroll" style={{ padding: "20px 20px 96px", display: "flex", flexDirection: "column", gap: 20 }}>
+            <Section q={STEPS[0].q} helper="이름과 한 줄 설명만 적어도 충분해요.">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 700 }}>
+                  모임명 <span style={{ color: "var(--color-accent)" }}>*</span>
+                </label>
+                <input className="input" placeholder="예) 6월 전시 모임"
+                  value={data.name} onChange={(e) => set({ name: e.target.value })} maxLength={24} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 700 }}>한 줄 설명</label>
+                <input className="input" placeholder="6월 초에 전시 보러 갈 사람들 일정 조율"
+                  value={data.desc} onChange={(e) => set({ desc: e.target.value })} maxLength={60} />
+                <span className="t-cap">{data.desc.length}/60</span>
+              </div>
+            </Section>
+
+            <Section q="모임 성격" sub>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {[
+                  { id: "friend",   icon: <Users size={18} color={data.kind === "friend" ? "var(--color-primary)" : "var(--color-text-2)"} stroke={1.85} />, title: "친구 모임",  sub: "전시, 모임, 가벼운 약속" },
+                  { id: "study",    icon: <BookOpen size={18} color={data.kind === "study" ? "var(--color-primary)" : "var(--color-text-2)"} stroke={1.85} />, title: "스터디",     sub: "정기 / 부정기 학습 모임" },
+                  { id: "business", icon: <Briefcase size={18} color={data.kind === "business" ? "var(--color-primary)" : "var(--color-text-2)"} stroke={1.85} />, title: "비즈니스",  sub: "팀 회의, 미팅" },
+                ].map((t) => (
+                  <OptionCard key={t.id}
+                    icon={t.icon} title={t.title} subtitle={t.sub}
+                    active={data.kind === t.id}
+                    onClick={() => set({ kind: t.id })}
+                  />
+                ))}
+              </div>
+            </Section>
+          </div>
+          <div className="bottom-bar">
+            <Button block primary disabled={data.name.trim().length < 2 || !data.kind} onClick={next}>다음</Button>
+          </div>
+        </>
+      )}
+
+      {/* Step 2 */}
+      {step === 2 && (
+        <>
+          <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
+            <Section q={STEPS[1].q} helper="이 기간 안에서 가능한 시간을 모아드려요. 응답 마감일은 조율 종료일보다 빨라야 해요.">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 700 }}>
+                  조율 시작일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                </label>
+                <DatePicker
+                  value={data.from}
+                  onChange={(d) => set({ from: d })}
+                  placeholder="시작일 선택"
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 700 }}>
+                  조율 종료일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                </label>
+                <DatePicker
+                  value={data.to}
+                  onChange={(d) => set({ to: d })}
+                  placeholder="종료일 선택"
+                  fromDate={data.from}
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 700 }}>
+                  응답 마감일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                </label>
+                <DatePicker
+                  value={data.due}
+                  onChange={(d) => set({ due: d })}
+                  placeholder="마감일 선택"
+                  toDate={data.to}
+                />
+              </div>
+            </Section>
+
+            <div style={{
+              background: "var(--color-baby-blue)", borderRadius: 12,
+              padding: "12px 14px", fontSize: 13, lineHeight: 1.55, letterSpacing: "-0.01em",
+            }}>
+              <b>참고</b> · 보통 응답 마감일은 조율 종료일 2–3일 전이 좋아요.
+            </div>
+          </div>
+          <div className="bottom-bar">
+            <Button block primary disabled={!data.from || !data.to || !data.due} onClick={next}>다음</Button>
+
+          </div>
+        </>
+      )}
+
+      {/* Step 3 */}
+      {step === 3 && (
+        <>
+          <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
+            <Section q={STEPS[2].q} helper="연속으로 가능한 구간을 계산하는 데 사용해요.">
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="t-body2" style={{ fontWeight: 700 }}>예상 소요 시간</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+                  {DURATIONS.map((d) => (
+                    <button key={d} onClick={() => set({ duration: d })} style={{
+                      padding: "8px 14px", borderRadius: 999, fontFamily: "inherit",
+                      fontSize: 14, fontWeight: 700, letterSpacing: "-0.015em", cursor: "pointer",
+                      border: data.duration === d ? "1.5px solid var(--color-primary)" : "1px solid var(--color-line)",
+                      background: data.duration === d ? "var(--color-primary-soft)" : "#fff",
+                      color: data.duration === d ? "var(--color-primary)" : "var(--color-text)",
+                      transition: "all 120ms",
+                    }}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Section>
+
+            <Section q="선택 가능한 시간대" sub>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {TIME_RANGES.map((t) => (
+                  <OptionCard key={t.id}
+                    icon={null} title={t.label} subtitle={t.sub}
+                    active={data.range === t.id}
+                    onClick={() => set({ range: t.id })}
+                  />
+                ))}
+              </div>
+            </Section>
+          </div>
+          <div className="bottom-bar">
+            <Button block primary disabled={!data.duration || !data.range} onClick={next}>다음</Button>
+          </div>
+        </>
+      )}
+
+      {/* Step 4 — Invite link */}
+      {step === 4 && (
+        <>
+          <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
+            <Section q={STEPS[3].q} helper="링크를 받은 사람은 로그인 없이 바로 참여할 수 있어요.">
+              {/* Link box */}
+              <div style={{
+                background: "var(--color-surface)", border: "1px solid var(--color-line)",
+                borderRadius: 16, padding: "14px 16px",
+                display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="t-cap">초대 링크</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                    woori-eonje.app/invite/abc-1234
+                  </div>
+                </div>
+                <button onClick={handleCopy} className="btn outline" style={{ height: 36, padding: "0 12px", fontSize: 13, flex: "none" }}>
+                  <Copy size={14} color="var(--color-primary)" />
+                  <span>{copied ? "복사됨!" : "복사"}</span>
+                </button>
+              </div>
+
+              <Button block variant="secondary" leftIcon={<Share size={16} color="var(--color-primary)" />} onClick={() => {}}>
+                카카오톡으로 공유
+              </Button>
+
+              <div style={{
+                background: "var(--color-primary-soft)", borderRadius: 12,
+                padding: "12px 14px", fontSize: 13, lineHeight: 1.6, letterSpacing: "-0.01em",
+                color: "var(--color-primary)",
+              }}>
+                링크를 받은 사람은 누구나 참여할 수 있어요. 단톡방에 바로 붙여넣으면 돼요.
+              </div>
+            </Section>
+
+            {/* Meeting summary */}
+            <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-line)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: "-0.015em" }}>{data.name || "6월 전시 모임"}</div>
+              <div className="divider" />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div><div className="t-cap">조율 기간</div><div style={{ fontSize: 13, fontWeight: 700 }}>{data.from ? data.from.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }) : "6.1"} — {data.to ? data.to.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }) : "6.14"}</div></div>
+                <div><div className="t-cap">소요 시간</div><div style={{ fontSize: 13, fontWeight: 700 }}>{data.duration || "2시간"}</div></div>
+                <div><div className="t-cap">응답 마감</div><div style={{ fontSize: 13, fontWeight: 700 }}>{data.due ? data.due.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }) : "5.30"}</div></div>
+              </div>
+            </div>
+          </div>
+          <div className="bottom-bar">
+            <Button block primary onClick={next}>응답 대기로 이동</Button>
+          </div>
+        </>
+      )}
+
+      {/* Step 5 — Waiting */}
+      {step === 5 && (
+        <>
+          <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
+            <Section q={STEPS[4].q} helper="참여자가 응답을 제출하면 실시간으로 반영돼요.">
+              {/* Response progress */}
+              <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-line)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>응답 현황</div>
+                  <span className="pill ok">응답 수집 중</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ flex: 1, height: 8, background: "var(--color-bg-2)", borderRadius: 999, overflow: "hidden" }}>
+                    <div style={{ width: "33%", height: "100%", background: "var(--color-primary)", borderRadius: 999 }} />
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text-2)" }}>2/6명</span>
+                </div>
+                <div className="t-cap">마감까지 <b style={{ color: "var(--color-primary)" }}>5일 남았어요</b></div>
+              </div>
+
+              {/* Participant list */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {["소미", "지현"].map((name, i) => (
+                  <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--color-surface)", border: "1px solid var(--color-line)", borderRadius: 12 }}>
+                    <span style={{ width: 28, height: 28, borderRadius: 999, background: i === 0 ? "var(--color-primary)" : "var(--color-baby-blue)", color: i === 0 ? "#fff" : "#333", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>
+                      {name[0]}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{name}</span>
+                    <span className="pill ok" style={{ height: 22, fontSize: 11, padding: "0 8px" }}>응답 완료</span>
+                  </div>
+                ))}
+                {["민수", "유나", "태오", "하린"].map((name) => (
+                  <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--color-surface)", border: "1px solid var(--color-line)", borderRadius: 12 }}>
+                    <span style={{ width: 28, height: 28, borderRadius: 999, background: "var(--color-bg-2)", color: "var(--color-text-muted)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>
+                      {name[0]}
+                    </span>
+                    <span style={{ fontSize: 14, fontWeight: 600, flex: 1, color: "var(--color-text-muted)" }}>{name}</span>
+                    <span className="pill gray" style={{ height: 22, fontSize: 11, padding: "0 8px" }}>대기 중</span>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          </div>
+          <div className="bottom-bar">
+            <Button block primary onClick={() => router.push("/meetings/1/recommendations")}>
+              추천 결과 보기
+            </Button>
+            <Button block variant="ghost" onClick={() => router.push("/meetings")}>
+              내 모임 목록으로
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
