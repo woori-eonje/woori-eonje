@@ -4,6 +4,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
+import { MeetingsModule } from './meetings/meetings.module';
 import { InvitesModule } from './invites/invites.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
@@ -14,6 +15,7 @@ import { DomainExceptionFilter } from './common/domain-exception.filter';
   imports: [
     PrismaModule,
     AuthModule,
+    MeetingsModule,
     InvitesModule,
     AvailabilityModule,
     RecommendationsModule,

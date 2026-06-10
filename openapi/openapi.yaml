@@ -581,8 +581,8 @@ components:
         category: { $ref: '#/components/schemas/MeetingCategory' }
         startDate: { type: string, format: date, description: '조율 시작일 (기간은 최대 14일)' }
         endDate: { type: string, format: date }
-        availableStartTime: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', description: 'HH:mm' }
-        availableEndTime: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', description: 'HH:mm' }
+        availableStartTime: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', description: 'HH:mm (1시간 슬롯 단위라 정시만 — 분=00)' }
+        availableEndTime: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', description: 'HH:mm (1시간 슬롯 단위라 정시만 — 분=00)' }
         durationHours: { type: integer, minimum: 1, maximum: 12 }
         responseDeadline: { type: string, format: date-time }
       example:

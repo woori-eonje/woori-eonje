@@ -111,6 +111,36 @@ export interface LoginResult {
   user: AuthUser;
 }
 
+// ── API DTO: 모임 생성 (POST /api/meetings) ────────────────────
+// openapi.yaml 의 CreateMeetingRequest/MeetingCreated 스키마와 일치. FE·BE 공유.
+export interface CreateMeetingRequest {
+  /** 1~100자 */
+  title: string;
+  /** ~500자, 없으면 null */
+  description?: string | null;
+  category: MeetingCategory;
+  /** YYYY-MM-DD (기간은 최대 14일) */
+  startDate: string;
+  /** YYYY-MM-DD */
+  endDate: string;
+  /** HH:mm */
+  availableStartTime: string;
+  /** HH:mm */
+  availableEndTime: string;
+  /** 정수 1~12 */
+  durationHours: number;
+  /** ISO 8601 date-time */
+  responseDeadline: string;
+}
+
+export interface MeetingCreated {
+  meetingId: number;
+  title: string;
+  status: MeetingStatus;
+  /** format: uri — 초대 링크 */
+  inviteUrl: string;
+}
+
 // ── API DTO: 초대 공개 정보 (GET /api/invites/{inviteToken}) ────
 // openapi.yaml 의 InvitePublic 스키마와 일치. FE·BE 공유.
 export interface InvitePublic {

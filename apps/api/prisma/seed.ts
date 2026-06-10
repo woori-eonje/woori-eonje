@@ -7,6 +7,7 @@ import 'dotenv/config';
 import { PrismaClient, MeetingCategory, MeetingStatus } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { hashSync } from 'bcryptjs';
+import { generateSlots } from '../src/meetings/slot-generation';
 
 // 데모 모임장 로그인 평문 비밀번호(테스트용): demo1234
 const DEMO_OWNER_PASSWORD = 'demo1234';
@@ -65,29 +66,18 @@ async function main(): Promise<void> {
   });
 
   // ── availability_slots 생성 (멱등: 기존 모임 슬롯 삭제 후 재생성) ──
-  // 기간 startDate..endDate(양끝 포함), 매일 18:00~23:00 를 1시간 슬롯으로 쪼갬.
-  // → 하루 5슬롯(18,19,20,21,22시 시작, 각 1h), 14일 = 70슬롯.
-  // new Date('2026-06-01T18:00:00') 는 로컬(KST) 시각으로 해석된다.
+  // create-meeting 과 동일한 KST(+09:00) 고정 슬롯 생성 헬퍼 공유 → TZ 환경 무관 일관.
+  // 기간 startDate..endDate(양끝 포함) × 매일 18:00~23:00 = 하루 5슬롯 × 14일 = 70슬롯.
   await prisma.availabilitySlot.deleteMany({ where: { meetingId: meeting.id } });
 
   const [startHour] = meeting.availableStartTime.split(':').map(Number); // 18
   const [endHour] = meeting.availableEndTime.split(':').map(Number); //     23
-
-  const slots: { meetingId: number; slotStartAt: Date; slotEndAt: Date }[] = [];
-  const day = new Date(meeting.startDate);
-  const lastDay = new Date(meeting.endDate);
-  while (day.getTime() <= lastDay.getTime()) {
-    const y = day.getFullYear();
-    const m = String(day.getMonth() + 1).padStart(2, '0');
-    const d = String(day.getDate()).padStart(2, '0');
-    for (let hour = startHour; hour < endHour; hour++) {
-      const hh = String(hour).padStart(2, '0');
-      const slotStartAt = new Date(`${y}-${m}-${d}T${hh}:00:00`);
-      const slotEndAt = new Date(slotStartAt.getTime() + 60 * 60 * 1000);
-      slots.push({ meetingId: meeting.id, slotStartAt, slotEndAt });
-    }
-    day.setDate(day.getDate() + 1);
-  }
+  const slots = generateSlots(
+    meeting.startDate.toISOString().slice(0, 10),
+    meeting.endDate.toISOString().slice(0, 10),
+    startHour,
+    endHour,
+  ).map((s) => ({ meetingId: meeting.id, ...s }));
 
   await prisma.availabilitySlot.createMany({ data: slots });
 
