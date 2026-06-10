@@ -12,6 +12,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type {
+  ConfirmMeetingRequest,
+  ConfirmResult,
   CreateMeetingRequest,
   MeetingCreated,
   MeetingDetail,
@@ -75,6 +77,30 @@ export class MeetingsController {
       participantId,
       req.user.id,
       body.isRequired,
+    );
+  }
+
+  // POST /api/meetings/:meetingId/confirm — 일정 확정 (JWT + 모임장 소유).
+  // 추천 결과 1개를 골라 모임을 CONFIRMED 로 전환. 이미 확정된 모임은 409.
+  @Post(':meetingId/confirm')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  confirmMeeting(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+    @Body() body: ConfirmMeetingRequest,
+  ): Promise<ConfirmResult> {
+    if (
+      !body ||
+      typeof body.recommendationId !== 'number' ||
+      !Number.isInteger(body.recommendationId)
+    ) {
+      throw new BadRequestException('recommendationId 는 정수여야 합니다.');
+    }
+    return this.meetingsService.confirmMeeting(
+      meetingId,
+      req.user.id,
+      body.recommendationId,
     );
   }
 }

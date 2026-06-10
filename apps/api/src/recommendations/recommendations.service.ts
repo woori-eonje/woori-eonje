@@ -98,6 +98,7 @@ export class RecommendationsService {
     });
 
     const recommendations: Recommendation[] = rows.map((r) => ({
+      recommendationId: r.id,
       rank: r.rank,
       startAt: r.startAt.toISOString(),
       endAt: r.endAt.toISOString(),

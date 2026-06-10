@@ -255,6 +255,8 @@ export interface MyAvailability {
 // ── API DTO: 추천 결과 (GET /api/meetings/{meetingId}/recommendations) ──
 // openapi.yaml 의 Recommendation 스키마와 일치. FE·BE 공유.
 export interface Recommendation {
+  /** recommendation_results 행 id (confirm 요청에 사용). 재계산 시 바뀜. */
+  recommendationId: number;
   rank: number;
   /** ISO 8601 date-time — 후보 구간 첫 슬롯 시작 */
   startAt: string;
@@ -273,4 +275,20 @@ export interface Recommendation {
 export interface RecommendationsResponse {
   meetingId: number;
   recommendations: Recommendation[];
+}
+
+// ── API DTO: 일정 확정 (POST /api/meetings/{meetingId}/confirm) ──
+// openapi.yaml 의 ConfirmResult / 요청 스키마와 일치. FE·BE 공유.
+export interface ConfirmMeetingRequest {
+  /** 확정할 추천 결과(recommendation_results) 행 id */
+  recommendationId: number;
+}
+
+export interface ConfirmResult {
+  meetingId: number;
+  status: MeetingStatus;
+  /** ISO 8601 date-time — 확정된 구간 시작(추천 스냅샷) */
+  confirmedStartAt: string;
+  /** ISO 8601 date-time — 확정된 구간 끝(추천 스냅샷) */
+  confirmedEndAt: string;
 }

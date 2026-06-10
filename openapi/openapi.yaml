@@ -256,7 +256,13 @@ paths:
                   - type: object
                     properties:
                       data: { $ref: '#/components/schemas/ConfirmResult' }
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
         '403':
+          $ref: '#/components/responses/Error'
+        '404':
           $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
@@ -696,6 +702,7 @@ components:
     Recommendation:
       type: object
       properties:
+        recommendationId: { type: integer, description: 'recommendation_results 행 id (confirm 요청에 사용). 재계산 시 바뀌므로 조회 직후의 값만 유효' }
         rank: { type: integer }
         startAt: { type: string, format: date-time }
         endAt: { type: string, format: date-time }

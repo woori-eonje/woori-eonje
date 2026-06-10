@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import {
+  type ConfirmResult,
   type CreateMeetingRequest,
+  ErrorCode,
   MeetingCategory,
   type MeetingCreated,
   type MeetingDetail,
@@ -9,6 +11,7 @@ import {
   type MeetingSummary,
   type Participant,
 } from '@whenwe/types';
+import { DomainException } from '../common/domain-exception';
 import { assertMeetingOwner, meetingNotFound } from '../common/meeting-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { RecommendationsService } from '../recommendations/recommendations.service';
@@ -197,6 +200,85 @@ export class MeetingsService {
       participantType: updated.participantType,
       isRequired: updated.isRequired,
     };
+  }
+
+  // POST /api/meetings/:meetingId/confirm — JWT + 모임장 소유.
+  // 추천 결과 1개를 골라 모임을 CONFIRMED 로 확정한다. 확정 시각은 추천 행의
+  // start/end 를 스냅샷으로 복사(이후 추천 재계산돼도 불변). 중복 확정 방지는
+  // 상태 조건부 updateMany(count) 로 보장. 2~4 를 한 트랜잭션으로 원자 처리.
+  async confirmMeeting(
+    meetingId: number,
+    userId: number,
+    recommendationId: number,
+  ): Promise<ConfirmResult> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true, status: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    // 사전 status 체크 — 흔한 재확정 케이스를 트랜잭션 전에 409 로 빠르게 거부.
+    if (
+      meeting.status !== MeetingStatus.COLLECTING &&
+      meeting.status !== MeetingStatus.READY_TO_CONFIRM
+    ) {
+      throw this.meetingAlreadyConfirmed();
+    }
+    const previousStatus = meeting.status;
+
+    return this.prisma.$transaction(async (tx) => {
+      const recommendation = await tx.recommendationResult.findUnique({
+        where: { id: recommendationId },
+        select: { id: true, meetingId: true, startAt: true, endAt: true },
+      });
+      // 없거나 이 모임의 추천이 아니면 404.
+      if (!recommendation || recommendation.meetingId !== meetingId) {
+        throw meetingNotFound();
+      }
+
+      // 상태 조건부 UPDATE — COLLECTING/READY_TO_CONFIRM 일 때만 CONFIRMED 로.
+      // count===0 이면 그 사이 이미 확정/마감됐다는 뜻(경합) → 409.
+      const { count } = await tx.meeting.updateMany({
+        where: {
+          id: meetingId,
+          status: {
+            in: [MeetingStatus.COLLECTING, MeetingStatus.READY_TO_CONFIRM],
+          },
+        },
+        data: {
+          status: MeetingStatus.CONFIRMED,
+          confirmedStartAt: recommendation.startAt,
+          confirmedEndAt: recommendation.endAt,
+        },
+      });
+      if (count === 0) {
+        throw this.meetingAlreadyConfirmed();
+      }
+
+      await tx.meetingStateLog.create({
+        data: {
+          meetingId,
+          previousStatus,
+          nextStatus: MeetingStatus.CONFIRMED,
+          reason: 'confirmed',
+        },
+      });
+
+      return {
+        meetingId,
+        status: MeetingStatus.CONFIRMED,
+        confirmedStartAt: recommendation.startAt.toISOString(),
+        confirmedEndAt: recommendation.endAt.toISOString(),
+      };
+    });
+  }
+
+  private meetingAlreadyConfirmed(): DomainException {
+    return new DomainException(
+      ErrorCode.MEETING_ALREADY_CONFIRMED,
+      HttpStatus.CONFLICT,
+      '이미 확정된 모임입니다.',
+    );
   }
 
   // ── 수동 검증 (invites/auth 선례처럼 서비스 내에서 BadRequestException) ──
