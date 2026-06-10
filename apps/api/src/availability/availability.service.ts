@@ -9,10 +9,14 @@ import {
 } from '@whenwe/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { DomainException } from '../common/domain-exception';
+import { RecommendationsService } from '../recommendations/recommendations.service';
 
 @Injectable()
 export class AvailabilityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly recommendations: RecommendationsService,
+  ) {}
 
   // GET /api/meetings/:meetingId/slots — 인증 불필요
   async listSlots(meetingId: number): Promise<SlotsResponse> {
@@ -126,8 +130,10 @@ export class AvailabilityService {
       ),
     ]);
 
-    // 추천 재계산은 이번 범위(슬라이스 3)가 아님 — 항상 false.
-    return { saved: true, updatedRecommendation: false };
+    // 응답 저장 성공 후 추천 재계산 → recommendation_results 갱신.
+    await this.recommendations.recompute(meetingId);
+
+    return { saved: true, updatedRecommendation: true };
   }
 
   // GET /api/meetings/:meetingId/availability/me — X-Participant-Edit-Token 인증

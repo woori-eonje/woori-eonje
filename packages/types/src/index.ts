@@ -144,3 +144,26 @@ export interface MyAvailability {
   guestName: string;
   items: AvailabilityItem[];
 }
+
+// ── API DTO: 추천 결과 (GET /api/meetings/{meetingId}/recommendations) ──
+// openapi.yaml 의 Recommendation 스키마와 일치. FE·BE 공유.
+export interface Recommendation {
+  rank: number;
+  /** ISO 8601 date-time — 후보 구간 첫 슬롯 시작 */
+  startAt: string;
+  /** ISO 8601 date-time — 후보 구간 마지막 슬롯 끝 */
+  endAt: string;
+  availableCount: number;
+  maybeCount: number;
+  unavailableCount: number;
+  requiredAvailableCount: number;
+  requiredMaybeCount: number;
+  requiredUnavailableCount: number;
+  requiredParticipantSatisfied: boolean;
+  score: number;
+}
+
+export interface RecommendationsResponse {
+  meetingId: number;
+  recommendations: Recommendation[];
+}

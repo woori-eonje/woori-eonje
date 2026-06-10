@@ -5,11 +5,17 @@ import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { InvitesModule } from './invites/invites.module';
 import { AvailabilityModule } from './availability/availability.module';
+import { RecommendationsModule } from './recommendations/recommendations.module';
 import { ResponseInterceptor } from './common/response.interceptor';
 import { DomainExceptionFilter } from './common/domain-exception.filter';
 
 @Module({
-  imports: [PrismaModule, InvitesModule, AvailabilityModule],
+  imports: [
+    PrismaModule,
+    InvitesModule,
+    AvailabilityModule,
+    RecommendationsModule,
+  ],
   controllers: [AppController],
   providers: [
     AppService,

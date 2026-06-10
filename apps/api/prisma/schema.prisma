@@ -148,7 +148,9 @@ model RecommendationResult {
   requiredAvailableCount   Int      @map("required_available_count")
   requiredMaybeCount       Int      @map("required_maybe_count")
   requiredUnavailableCount Int      @map("required_unavailable_count")
-  score                    Int // 가능 슬롯 점수 합 (가능2/애매1/불가0)
+  // 필수참여자 전원 가능 여부 — 엔진이 재계산 시점에 산출해 저장(읽을 때 파생하지 않음)
+  requiredParticipantSatisfied Boolean @default(false) @map("required_participant_satisfied")
+  score                    Int // 가능 슬롯 점수 '합' (가능2/애매1/불가0). 평균 정렬의 대용(동일 N·동일 참여자 → 합 정렬 = 평균 정렬)
   createdAt                DateTime @default(now()) @map("created_at")
 
   meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
