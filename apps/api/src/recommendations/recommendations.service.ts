@@ -82,15 +82,24 @@ export class RecommendationsService {
   }
 
   // GET /api/meetings/:meetingId/recommendations — 저장된 결과만 반환(계산 안 함).
+  // 모임장 전용: meeting.ownerId === userId 가 아니면 403.
   async getRecommendations(
     meetingId: number,
+    userId: number,
   ): Promise<RecommendationsResponse> {
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
-      select: { id: true },
+      select: { id: true, ownerId: true },
     });
     if (!meeting) {
       throw this.meetingNotFound();
+    }
+    if (meeting.ownerId !== userId) {
+      throw new DomainException(
+        ErrorCode.FORBIDDEN_MEETING_OWNER_ONLY,
+        HttpStatus.FORBIDDEN,
+        '모임장만 접근할 수 있습니다.',
+      );
     }
 
     const rows = await this.prisma.recommendationResult.findMany({

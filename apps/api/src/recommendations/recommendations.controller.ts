@@ -1,10 +1,21 @@
-import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { RecommendationsResponse } from '@whenwe/types';
+import {
+  JwtAuthGuard,
+  type AuthenticatedRequest,
+} from '../auth/jwt-auth.guard';
 import { RecommendationsService } from './recommendations.service';
 
-// 인증(JWT)은 auth 슬라이스 전까지 미적용 — 지금은 열어둔다.
-// TODO(auth): 모임장 JWT 가드 적용.
+// 추천 결과는 모임장 전용: JWT 인증(JwtAuthGuard) + 서비스에서 owner 검증.
 @Controller('meetings/:meetingId')
+@UseGuards(JwtAuthGuard)
 export class RecommendationsController {
   constructor(
     private readonly recommendationsService: RecommendationsService,
@@ -14,7 +25,11 @@ export class RecommendationsController {
   @Get('recommendations')
   getRecommendations(
     @Param('meetingId', ParseIntPipe) meetingId: number,
+    @Req() req: AuthenticatedRequest,
   ): Promise<RecommendationsResponse> {
-    return this.recommendationsService.getRecommendations(meetingId);
+    return this.recommendationsService.getRecommendations(
+      meetingId,
+      req.user.id,
+    );
   }
 }

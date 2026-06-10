@@ -3,6 +3,7 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
 import { InvitesModule } from './invites/invites.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
@@ -12,6 +13,7 @@ import { DomainExceptionFilter } from './common/domain-exception.filter';
 @Module({
   imports: [
     PrismaModule,
+    AuthModule,
     InvitesModule,
     AvailabilityModule,
     RecommendationsModule,

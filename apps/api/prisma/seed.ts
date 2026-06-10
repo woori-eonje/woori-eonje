@@ -6,6 +6,10 @@
 import 'dotenv/config';
 import { PrismaClient, MeetingCategory, MeetingStatus } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { hashSync } from 'bcryptjs';
+
+// 데모 모임장 로그인 평문 비밀번호(테스트용): demo1234
+const DEMO_OWNER_PASSWORD = 'demo1234';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -15,14 +19,16 @@ if (!connectionString) {
 const prisma = new PrismaClient({ adapter: new PrismaPg(connectionString) });
 
 async function main(): Promise<void> {
+  // 로그인 → GET recommendations 테스트가 가능하도록 실제 bcrypt 해시로 저장.
+  // 재시드 멱등을 위해 update 에서도 비밀번호를 갱신한다.
+  const demoOwnerPasswordHash = hashSync(DEMO_OWNER_PASSWORD, 10);
   const owner = await prisma.user.upsert({
     where: { email: 'owner@demo.dev' },
-    update: {},
+    update: { password: demoOwnerPasswordHash, nickname: '데모모임장' },
     create: {
       email: 'owner@demo.dev',
       nickname: '데모모임장',
-      // 데모용 더미 해시(실제 인증에 쓰지 않음)
-      password: '$2b$10$demoDemoDemoDemoDemoDeMOCKHASHForSeedOnly1234567890ab',
+      password: demoOwnerPasswordHash,
     },
   });
 

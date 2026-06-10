@@ -54,6 +54,10 @@ export const ErrorCode = {
   PARTICIPANT_EDIT_TOKEN_INVALID: 'PARTICIPANT_EDIT_TOKEN_INVALID',
   FORBIDDEN_MEETING_OWNER_ONLY: 'FORBIDDEN_MEETING_OWNER_ONLY',
   RECOMMENDATION_NOT_READY: 'RECOMMENDATION_NOT_READY',
+  // ── 인증(Auth) ──
+  EMAIL_ALREADY_EXISTS: 'EMAIL_ALREADY_EXISTS',
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  UNAUTHENTICATED: 'UNAUTHENTICATED',
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
 
@@ -76,6 +80,36 @@ export interface ApiFailure {
 }
 
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
+
+// ── API DTO: 인증 (POST /api/auth/signup|login, GET /api/auth/me) ──
+// openapi.yaml 의 SignupRequest/LoginRequest/AuthUser/LoginResult 와 일치. FE·BE 공유.
+export interface SignupRequest {
+  /** format: email */
+  email: string;
+  /** 8~72자 */
+  password: string;
+  /** 1~30자 */
+  nickname: string;
+}
+
+export interface LoginRequest {
+  /** format: email */
+  email: string;
+  password: string;
+}
+
+/** 인증 응답에 노출되는 사용자 정보 — password 는 절대 포함하지 않는다. */
+export interface AuthUser {
+  id: number;
+  email: string;
+  nickname: string;
+}
+
+export interface LoginResult {
+  /** JWT (Authorization: Bearer <accessToken>) */
+  accessToken: string;
+  user: AuthUser;
+}
 
 // ── API DTO: 초대 공개 정보 (GET /api/invites/{inviteToken}) ────
 // openapi.yaml 의 InvitePublic 스키마와 일치. FE·BE 공유.

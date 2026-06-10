@@ -541,6 +541,9 @@ components:
         - PARTICIPANT_EDIT_TOKEN_INVALID
         - FORBIDDEN_MEETING_OWNER_ONLY
         - RECOMMENDATION_NOT_READY
+        - EMAIL_ALREADY_EXISTS
+        - INVALID_CREDENTIALS
+        - UNAUTHENTICATED
 
     # ── Auth ──
     SignupRequest:
