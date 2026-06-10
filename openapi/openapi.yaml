@@ -460,6 +460,10 @@ paths:
               schema:
                 type: string
                 format: binary
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
         '409':
@@ -547,6 +551,7 @@ components:
         - PARTICIPANT_EDIT_TOKEN_INVALID
         - FORBIDDEN_MEETING_OWNER_ONLY
         - RECOMMENDATION_NOT_READY
+        - MEETING_NOT_CONFIRMED
         - EMAIL_ALREADY_EXISTS
         - INVALID_CREDENTIALS
         - UNAUTHENTICATED

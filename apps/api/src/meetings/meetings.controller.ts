@@ -9,8 +9,11 @@ import {
   Patch,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { SkipEnvelope } from '../common/skip-envelope.decorator';
 import type {
   ConfirmMeetingRequest,
   ConfirmResult,
@@ -102,5 +105,29 @@ export class MeetingsController {
       req.user.id,
       body.recommendationId,
     );
+  }
+
+  // GET /api/meetings/:meetingId/calendar.ics — JWT + 모임장 소유.
+  // 확정된 모임의 iCalendar 파일을 봉투 없이 raw text/calendar 로 반환. 미확정이면 409.
+  @Get(':meetingId/calendar.ics')
+  @UseGuards(JwtAuthGuard)
+  @SkipEnvelope()
+  async downloadCalendar(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<string> {
+    const ics = await this.meetingsService.downloadCalendar(
+      meetingId,
+      req.user.id,
+    );
+    // 성공 시에만 헤더 설정 — 에러(403/404/409)는 서비스에서 throw 되어 여기 도달 전이라
+    // text/calendar 헤더가 붙지 않고 예외 필터가 application/json 봉투로 응답한다.
+    res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="woori-eonje.ics"',
+    );
+    return ics;
   }
 }

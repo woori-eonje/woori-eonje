@@ -15,6 +15,7 @@ import { DomainException } from '../common/domain-exception';
 import { assertMeetingOwner, meetingNotFound } from '../common/meeting-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { RecommendationsService } from '../recommendations/recommendations.service';
+import { buildICS } from './ics';
 import { generateSlots } from './slot-generation';
 
 const MAX_PERIOD_DAYS = 14;
@@ -270,6 +271,44 @@ export class MeetingsService {
         confirmedStartAt: recommendation.startAt.toISOString(),
         confirmedEndAt: recommendation.endAt.toISOString(),
       };
+    });
+  }
+
+  // GET /api/meetings/:meetingId/calendar.ics — JWT + 모임장 소유.
+  // 확정(CONFIRMED + confirmed* 존재)된 모임만 .ics 텍스트를 반환한다. 미확정이면 409.
+  async downloadCalendar(meetingId: number, userId: number): Promise<string> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: {
+        id: true,
+        ownerId: true,
+        status: true,
+        title: true,
+        description: true,
+        confirmedStartAt: true,
+        confirmedEndAt: true,
+      },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    if (
+      meeting.status !== MeetingStatus.CONFIRMED ||
+      !meeting.confirmedStartAt ||
+      !meeting.confirmedEndAt
+    ) {
+      throw new DomainException(
+        ErrorCode.MEETING_NOT_CONFIRMED,
+        HttpStatus.CONFLICT,
+        '아직 확정되지 않은 모임입니다.',
+      );
+    }
+
+    return buildICS({
+      meetingId: meeting.id,
+      title: meeting.title,
+      description: meeting.description,
+      startAt: meeting.confirmedStartAt,
+      endAt: meeting.confirmedEndAt,
     });
   }
 
