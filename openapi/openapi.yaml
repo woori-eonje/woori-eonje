@@ -555,6 +555,8 @@ components:
         - EMAIL_ALREADY_EXISTS
         - INVALID_CREDENTIALS
         - UNAUTHENTICATED
+        - VALIDATION_ERROR
+        - INTERNAL_ERROR
 
     # ── Auth ──
     SignupRequest:
