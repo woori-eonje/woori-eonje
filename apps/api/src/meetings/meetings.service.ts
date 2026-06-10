@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import {
   type CreateMeetingRequest,
+  ErrorCode,
   MeetingCategory,
   type MeetingCreated,
+  type MeetingDetail,
   MeetingStatus,
+  type MeetingSummary,
 } from '@whenwe/types';
+import { DomainException } from '../common/domain-exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateSlots } from './slot-generation';
 
@@ -85,6 +89,80 @@ export class MeetingsService {
       title: meeting.title,
       status: meeting.status,
       inviteUrl: `${webBaseUrl}/invite/${meeting.inviteToken}`,
+    };
+  }
+
+  // GET /api/meetings — JWT 필요. 로그인 사용자가 owner 인 모임만 목록 반환.
+  async listMyMeetings(ownerId: number): Promise<MeetingSummary[]> {
+    const meetings = await this.prisma.meeting.findMany({
+      where: { ownerId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        responseDeadline: true,
+      },
+    });
+
+    return meetings.map((m) => ({
+      meetingId: m.id,
+      title: m.title,
+      status: m.status,
+      startDate: m.startDate.toISOString().slice(0, 10),
+      endDate: m.endDate.toISOString().slice(0, 10),
+      responseDeadline: m.responseDeadline.toISOString(),
+    }));
+  }
+
+  // GET /api/meetings/:meetingId — JWT 필요 + 모임장 소유 검증.
+  // 비소유 403(FORBIDDEN_MEETING_OWNER_ONLY), 없음 404(MEETING_NOT_FOUND).
+  // NOTE: 소유 검증 로직이 recommendations.service 와 중복됨. 향후 공유 헬퍼로
+  //       추출 후보(이번 슬라이스에서는 surgical 하게 인라인 유지).
+  async getMeeting(meetingId: number, userId: number): Promise<MeetingDetail> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      include: { _count: { select: { participants: true } } },
+    });
+    if (!meeting) {
+      throw new DomainException(
+        ErrorCode.MEETING_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+        '모임을 찾을 수 없습니다.',
+      );
+    }
+    if (meeting.ownerId !== userId) {
+      throw new DomainException(
+        ErrorCode.FORBIDDEN_MEETING_OWNER_ONLY,
+        HttpStatus.FORBIDDEN,
+        '모임장만 접근할 수 있습니다.',
+      );
+    }
+
+    const webBaseUrl = process.env.WEB_BASE_URL ?? 'http://localhost:3000';
+
+    return {
+      meetingId: meeting.id,
+      title: meeting.title,
+      status: meeting.status,
+      startDate: meeting.startDate.toISOString().slice(0, 10),
+      endDate: meeting.endDate.toISOString().slice(0, 10),
+      responseDeadline: meeting.responseDeadline.toISOString(),
+      description: meeting.description,
+      category: meeting.category,
+      availableStartTime: meeting.availableStartTime,
+      availableEndTime: meeting.availableEndTime,
+      durationHours: meeting.durationHours,
+      inviteUrl: `${webBaseUrl}/invite/${meeting.inviteToken}`,
+      confirmedStartAt: meeting.confirmedStartAt
+        ? meeting.confirmedStartAt.toISOString()
+        : null,
+      confirmedEndAt: meeting.confirmedEndAt
+        ? meeting.confirmedEndAt.toISOString()
+        : null,
+      participantCount: meeting._count.participants,
     };
   }
 

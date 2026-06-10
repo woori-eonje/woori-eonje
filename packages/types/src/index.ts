@@ -141,6 +141,37 @@ export interface MeetingCreated {
   inviteUrl: string;
 }
 
+// ── API DTO: 모임 조회 (GET /api/meetings, GET /api/meetings/{meetingId}) ──
+// openapi.yaml 의 MeetingSummary/MeetingDetail 스키마와 일치. FE·BE 공유.
+export interface MeetingSummary {
+  meetingId: number;
+  title: string;
+  status: MeetingStatus;
+  /** YYYY-MM-DD */
+  startDate: string;
+  /** YYYY-MM-DD */
+  endDate: string;
+  /** ISO 8601 date-time */
+  responseDeadline: string;
+}
+
+export interface MeetingDetail extends MeetingSummary {
+  description: string | null;
+  category: MeetingCategory;
+  /** HH:mm */
+  availableStartTime: string;
+  /** HH:mm */
+  availableEndTime: string;
+  durationHours: number;
+  /** format: uri — 초대 링크 */
+  inviteUrl: string;
+  /** ISO 8601 date-time — 미확정이면 null */
+  confirmedStartAt: string | null;
+  /** ISO 8601 date-time — 미확정이면 null */
+  confirmedEndAt: string | null;
+  participantCount: number;
+}
+
 // ── API DTO: 초대 공개 정보 (GET /api/invites/{inviteToken}) ────
 // openapi.yaml 의 InvitePublic 스키마와 일치. FE·BE 공유.
 export interface InvitePublic {
