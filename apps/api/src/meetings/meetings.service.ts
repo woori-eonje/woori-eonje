@@ -1,15 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   type CreateMeetingRequest,
-  ErrorCode,
   MeetingCategory,
   type MeetingCreated,
   type MeetingDetail,
   MeetingStatus,
   type MeetingSummary,
 } from '@whenwe/types';
-import { DomainException } from '../common/domain-exception';
+import { assertMeetingOwner } from '../common/meeting-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { generateSlots } from './slot-generation';
 
@@ -117,29 +116,13 @@ export class MeetingsService {
     }));
   }
 
-  // GET /api/meetings/:meetingId — JWT 필요 + 모임장 소유 검증.
-  // 비소유 403(FORBIDDEN_MEETING_OWNER_ONLY), 없음 404(MEETING_NOT_FOUND).
-  // NOTE: 소유 검증 로직이 recommendations.service 와 중복됨. 향후 공유 헬퍼로
-  //       추출 후보(이번 슬라이스에서는 surgical 하게 인라인 유지).
+  // GET /api/meetings/:meetingId — JWT 필요 + 모임장 소유 검증(공유 assertMeetingOwner).
   async getMeeting(meetingId: number, userId: number): Promise<MeetingDetail> {
     const meeting = await this.prisma.meeting.findUnique({
       where: { id: meetingId },
       include: { _count: { select: { participants: true } } },
     });
-    if (!meeting) {
-      throw new DomainException(
-        ErrorCode.MEETING_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-        '모임을 찾을 수 없습니다.',
-      );
-    }
-    if (meeting.ownerId !== userId) {
-      throw new DomainException(
-        ErrorCode.FORBIDDEN_MEETING_OWNER_ONLY,
-        HttpStatus.FORBIDDEN,
-        '모임장만 접근할 수 있습니다.',
-      );
-    }
+    assertMeetingOwner(meeting, userId);
 
     const webBaseUrl = process.env.WEB_BASE_URL ?? 'http://localhost:3000';
 

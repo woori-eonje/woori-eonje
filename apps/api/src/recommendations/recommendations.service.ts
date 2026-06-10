@@ -1,11 +1,10 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
-  ErrorCode,
   type Recommendation,
   type RecommendationsResponse,
 } from '@whenwe/types';
 import { PrismaService } from '../prisma/prisma.service';
-import { DomainException } from '../common/domain-exception';
+import { assertMeetingOwner, meetingNotFound } from '../common/meeting-access';
 import {
   computeRecommendations,
   type EngineInput,
@@ -23,7 +22,7 @@ export class RecommendationsService {
       select: { id: true, durationHours: true },
     });
     if (!meeting) {
-      throw this.meetingNotFound();
+      throw meetingNotFound();
     }
 
     const [slots, participants, responses] = await Promise.all([
@@ -91,16 +90,7 @@ export class RecommendationsService {
       where: { id: meetingId },
       select: { id: true, ownerId: true },
     });
-    if (!meeting) {
-      throw this.meetingNotFound();
-    }
-    if (meeting.ownerId !== userId) {
-      throw new DomainException(
-        ErrorCode.FORBIDDEN_MEETING_OWNER_ONLY,
-        HttpStatus.FORBIDDEN,
-        '모임장만 접근할 수 있습니다.',
-      );
-    }
+    assertMeetingOwner(meeting, userId);
 
     const rows = await this.prisma.recommendationResult.findMany({
       where: { meetingId },
@@ -122,13 +112,5 @@ export class RecommendationsService {
     }));
 
     return { meetingId, recommendations };
-  }
-
-  private meetingNotFound(): DomainException {
-    return new DomainException(
-      ErrorCode.MEETING_NOT_FOUND,
-      HttpStatus.NOT_FOUND,
-      '모임을 찾을 수 없습니다.',
-    );
   }
 }
