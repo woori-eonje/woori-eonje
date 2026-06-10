@@ -7,9 +7,11 @@ import {
   type MeetingDetail,
   MeetingStatus,
   type MeetingSummary,
+  type Participant,
 } from '@whenwe/types';
-import { assertMeetingOwner } from '../common/meeting-access';
+import { assertMeetingOwner, meetingNotFound } from '../common/meeting-access';
 import { PrismaService } from '../prisma/prisma.service';
+import { RecommendationsService } from '../recommendations/recommendations.service';
 import { generateSlots } from './slot-generation';
 
 const MAX_PERIOD_DAYS = 14;
@@ -19,7 +21,10 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class MeetingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly recommendationsService: RecommendationsService,
+  ) {}
 
   // POST /api/meetings — JWT 필요. 모임 + 슬롯 + invite_token 을 한 트랜잭션으로 생성.
   async createMeeting(
@@ -146,6 +151,51 @@ export class MeetingsService {
         ? meeting.confirmedEndAt.toISOString()
         : null,
       participantCount: meeting._count.participants,
+    };
+  }
+
+  // PATCH /api/meetings/:meetingId/participants/:participantId — JWT + 모임장 소유.
+  // is_required 변경 후 추천 재계산(8단계 ①에 영향).
+  async setParticipantRequired(
+    meetingId: number,
+    participantId: number,
+    userId: number,
+    isRequired: boolean,
+  ): Promise<Participant> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    const participant = await this.prisma.participant.findUnique({
+      where: { id: participantId },
+      select: { id: true, meetingId: true },
+    });
+    // 존재하지 않거나, 이 모임 소속이 아니면 404.
+    if (!participant || participant.meetingId !== meetingId) {
+      throw meetingNotFound();
+    }
+
+    const updated = await this.prisma.participant.update({
+      where: { id: participantId },
+      data: { isRequired },
+      select: {
+        id: true,
+        guestName: true,
+        participantType: true,
+        isRequired: true,
+      },
+    });
+
+    // 필수참석자 변경 → 추천 결과 재계산.
+    await this.recommendationsService.recompute(meetingId);
+
+    return {
+      participantId: updated.id,
+      guestName: updated.guestName,
+      participantType: updated.participantType,
+      isRequired: updated.isRequired,
     };
   }
 

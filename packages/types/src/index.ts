@@ -205,6 +205,18 @@ export interface ParticipantRegistered {
   participantEditToken: string;
 }
 
+// ── API DTO: 참여자 (PATCH /api/meetings/{meetingId}/participants/{participantId})
+export interface Participant {
+  participantId: number;
+  guestName: string;
+  participantType: ParticipantType;
+  isRequired: boolean;
+}
+
+export interface SetParticipantRequiredRequest {
+  isRequired: boolean;
+}
+
 // ── API DTO: 슬롯 / 가능시간 제출 (GET slots, POST availability) ────
 export interface Slot {
   slotId: number;

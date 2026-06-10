@@ -1,10 +1,12 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -14,6 +16,8 @@ import type {
   MeetingCreated,
   MeetingDetail,
   MeetingSummary,
+  Participant,
+  SetParticipantRequiredRequest,
 } from '@whenwe/types';
 import {
   JwtAuthGuard,
@@ -51,5 +55,26 @@ export class MeetingsController {
     @Param('meetingId', ParseIntPipe) meetingId: number,
   ): Promise<MeetingDetail> {
     return this.meetingsService.getMeeting(meetingId, req.user.id);
+  }
+
+  // PATCH /api/meetings/:meetingId/participants/:participantId
+  // 필수참석자 지정/해제 (JWT 필요 + 모임장 소유). 변경 후 추천 재계산.
+  @Patch(':meetingId/participants/:participantId')
+  @UseGuards(JwtAuthGuard)
+  setParticipantRequired(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+    @Param('participantId', ParseIntPipe) participantId: number,
+    @Body() body: SetParticipantRequiredRequest,
+  ): Promise<Participant> {
+    if (!body || typeof body.isRequired !== 'boolean') {
+      throw new BadRequestException('isRequired 는 boolean 이어야 합니다.');
+    }
+    return this.meetingsService.setParticipantRequired(
+      meetingId,
+      participantId,
+      req.user.id,
+      body.isRequired,
+    );
   }
 }
