@@ -158,9 +158,9 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
           </button>
         </div>
 
-        {/* 대시보드(PC) 바로가기 */}
+        {/* 추천 결과 보기 */}
         <button
-          onClick={() => router.push(`/meetings/${id}/dashboard`)}
+          onClick={() => router.push(`/meetings/${id}/recommendations`)}
           style={{
             width: "100%", textAlign: "left",
             background: "var(--color-surface)", border: "1px solid var(--color-line)",
@@ -170,8 +170,8 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>히트맵 · 상세 현황 보기</div>
-            <div className="t-cap">데스크톱 대시보드로 이동</div>
+            <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.02em" }}>추천 결과 보기</div>
+            <div className="t-cap">지금까지 모인 응답으로 추천 시간 확인</div>
           </div>
           <ChevronRight size={18} color="var(--color-text-muted)" />
         </button>

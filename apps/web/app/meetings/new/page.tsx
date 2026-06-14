@@ -472,8 +472,14 @@ export default function WizardPage() {
             </Section>
           </div>
           <div className="bottom-bar">
-            <Button block primary onClick={() => router.push(`/meetings/${meetingId}/dashboard`)}>
-              대시보드로 이동
+            <Button block primary onClick={() => {
+              const isMobile = window.innerWidth < 768;
+              router.push(isMobile
+                ? `/meetings/${meetingId}/status`
+                : `/meetings/${meetingId}/dashboard`
+              );
+            }}>
+              {typeof window !== "undefined" && window.innerWidth < 768 ? "응답 현황 보기" : "대시보드로 이동"}
             </Button>
             <Button block variant="ghost" onClick={() => router.push("/meetings")}>
               내 모임 목록으로
