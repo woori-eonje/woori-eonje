@@ -169,7 +169,7 @@ apps/web/app/
 | `docs/domain.md` | 도메인 규칙, 데이터 모델, API 규약 |
 | `docs/architecture.md` | 아키텍처, 기술 스택, 렌더링 전략 |
 | `openapi/openapi.yaml` | 백엔드 API 계약 (API 연동 시 필독) |
-| `design-system/` | 디자인 토큰, 컴포넌트 스펙 |
+| `apps/web/app/globals.css` | 디자인 토큰, CSS 클래스 |
 
 ---
 

@@ -13,7 +13,7 @@ tools: Read, Grep, Glob, Bash
 - `docs/domain.md` — 도메인 규칙(추천 8단계 정렬, 점수 가중치, 상태머신, 토큰 2종, 동시성)
 - `openapi/openapi.yaml` — API 계약(백엔드/프론트 검증 시 필수 대조)
 - `docs/development.md`, `docs/architecture.md`
-- 프론트 작업이면 `docs/frontend.md` + `design-system/project/SKILL.md`(브랜드 절대 규칙)
+- 프론트 작업이면 `docs/frontend.md`(브랜드 절대 규칙 포함)
 
 ## 검수 차원
 1. **정확성/버그** — 엣지케이스, 동시성(unique 제약·조건부 UPDATE·upsert), 에러 처리, 상태 전환 누락.
