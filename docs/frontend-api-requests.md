@@ -60,6 +60,21 @@ MeetingSummary:
 현재 프론트는 로그인 상태 감지 + 닉네임 자동 입력까지 구현 완료.
 계정 연동은 아래 두 API 수정 후 연결 예정.
 
+### 3.5. `GET /api/invites/{token}` — `InvitePublic` 확정 시간 필드 추가
+
+CONFIRMED 상태 모임의 초대 링크 접속 시 확정 시간을 표시해야 하나, 현재 `InvitePublic`에 해당 필드 없음.
+`MeetingDetail`은 모임장 인증 필요라 초대 링크 SSR에서 호출 불가.
+
+```yaml
+InvitePublic 추가 필드 (status === "CONFIRMED"일 때):
+  confirmedStartAt: string | null  # ISO 8601
+  confirmedEndAt: string | null    # ISO 8601
+```
+
+**영향 화면:** `/invite/[token]` CONFIRMED 상태 — 현재 "확정된 시간 표시 준비 중" 임시 문구 노출 중
+
+---
+
 ### 4. `POST /api/invites/{token}/participants` 수정
 
 ```yaml

@@ -64,10 +64,14 @@ function ConfirmedScreen({ dto }: { dto: InvitePublic }) {
         </div>
 
         <div style={{
-          background: "var(--color-baby-blue)", borderRadius: 14,
-          padding: "12px 16px", fontSize: 13, color: "#1A4F87", lineHeight: 1.6,
+          background: "var(--color-primary-soft)", borderRadius: 14,
+          padding: "12px 16px", fontSize: 13, color: "var(--color-primary)", lineHeight: 1.6, fontWeight: 600,
         }}>
-          모임장이 일정을 확정했어요. 확정된 시간은 모임장에게 직접 확인해 주세요.
+          🗓 확정된 시간 표시 준비 중이에요.
+          <br />
+          <span style={{ fontWeight: 400, color: "var(--color-text-2)" }}>
+            모임장에게 확정 시간을 확인하거나, 잠시 후 다시 접속해 주세요.
+          </span>
         </div>
       </div>
     </div>
