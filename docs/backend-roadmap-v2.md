@@ -78,3 +78,34 @@ v1은 "기능 구현 완료"이지 "프로덕션 완성"은 아니다. 포트폴
 > **배포(Tier0) → 핵심 경로 e2e 테스트(Tier0) → 알림/이벤트(Tier1) → 비동기 재계산·캐싱(Tier2)**
 
 포트폴리오 관점에서 **"실제 배포된 URL + 동시성/소유권 e2e 테스트"** 까지가 v1.5로 가장 가치 있고, 그 뒤가 진짜 2차 기능이다.
+
+---
+
+## 프론트엔드 요청 사항 (프론트 구현이 블록된 항목)
+
+프론트 작업 중 API 미지원으로 구현 불가능한 항목들. **Tier 0~1 사이** 우선순위.
+
+### 즉시 필요 (현재 UI가 목데이터로 동작 중)
+
+| 항목 | 변경 내용 | 영향 화면 |
+|---|---|---|
+| **`MeetingSummary` 필드 추가** | `respondedCount: number`, `category: MeetingCategory` 추가 | 내 모임 목록 — 응답인원 0/0명·카테고리 항상 "친구" 버그 |
+| **`GET /api/meetings/{id}/participants`** 신규 | `[{ participantId, guestName, participantType, isRequired, hasResponded }]` | 필수 참석자 지정 UI (대시보드·status 화면) |
+| **`GET /api/meetings/{id}/aggregate`** 신규 | 슬롯별 `{ slotId, startAt, availableCount, maybeCount, unavailableCount }` | 대시보드 응답 현황 히트맵 (현재 100% 목데이터) |
+
+### 참여자-계정 연동 (로그인 유저가 참여자도 될 수 있는 플로우)
+
+현재 참여자는 무조건 GUEST 익명 등록. 로그인 유저가 초대 링크로 참여하면 계정과 연동되어야 함.
+
+| 항목 | 변경 내용 |
+|---|---|
+| **`POST /api/invites/{token}/participants`** 수정 | Bearer 토큰 있으면 `participantType: MEMBER`로 계정 연동 (없으면 기존 GUEST) |
+| **`GET /api/meetings`** 수정 | 내가 **참여한** 모임도 포함. `role: "ORGANIZER" \| "PARTICIPANT"` 필드 추가 |
+
+> 프론트는 이미 로그인 시 닉네임 자동 입력까지는 구현 완료. 계정 연동은 위 두 API 수정 후 연결 예정.
+
+### 상태 흐름 개선
+
+| 항목 | 변경 내용 | 이유 |
+|---|---|---|
+| **`MeetingDetail`에 `inviteUrl` 조건부 노출** | CONFIRMED 상태에서도 inviteUrl 유지 (현재는 확정 후 필요성 불명확) | 확정 화면 "공유 링크 복사" 기능용 |

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Logo } from "@/components/primitives";
 import { Calendar } from "@/components/icons";
-import { ApiError } from "@/lib/api";
+import { ApiError, getToken } from "@/lib/api";
+import { getMe } from "@/lib/auth";
 import type { InviteVM } from "@/lib/invite";
 import { registerParticipant, saveParticipant, loadParticipant } from "@/lib/participant";
 
@@ -14,6 +15,11 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const valid = name.trim().length >= 2;
+
+  useEffect(() => {
+    if (!getToken()) return;
+    getMe().then((user) => setName(user.nickname)).catch(() => {});
+  }, []);
 
   const handleStart = async () => {
     if (!valid || submitting) return;
