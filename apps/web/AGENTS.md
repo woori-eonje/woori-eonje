@@ -110,13 +110,15 @@ AGENTS.md를 읽고, 마지막 커밋 메시지의 `NEXT` 항목부터 작업을
 ## 브랜치 전략
 
 ```
-main            → 배포 가능한 안정 버전
-develop-fetch   → 통합 개발 브랜치 (현재 기본 작업 브랜치)
-feature/*       → 기능 개발
-fix/*           → 버그 수정
+main              → 배포 가능한 안정 버전
+develop-fetch     → 통합 브랜치 (프론트 + 백엔드 병합 기준점)
+  ├── develop-front    ← 프론트엔드 작업 브랜치 (여기서 작업)
+  └── develop-backend  ← 백엔드 작업 브랜치
 ```
 
-**PR 대상**: `feature/*` → `develop-fetch`
+- **작업 시작 전**: `develop-fetch` 기준으로 `develop-front` pull
+- **작업 완료 후**: `develop-front` → `develop-fetch` PR
+- **백엔드 변경사항 받을 때**: `develop-fetch` pull 후 `develop-front`에 merge
 
 ---
 
