@@ -45,7 +45,12 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
     throw new ApiError("BAD_RESPONSE", "서버 응답을 해석할 수 없어요.", res.status);
   }
   if (!body.success) {
-    throw new ApiError(body.error.code, body.error.message, res.status);
+    const err = new ApiError(body.error.code, body.error.message, res.status);
+    if (err.code === "UNAUTHENTICATED" && typeof window !== "undefined") {
+      clearToken();
+      window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`;
+    }
+    throw err;
   }
   return body.data;
 }

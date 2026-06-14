@@ -27,6 +27,23 @@ export default function ConfirmedPage({ params }: { params: Promise<{ id: string
       .then((m) => { if (m) setMeeting(m); });
   }, [id, router]);
 
+  const handleCalendar = async () => {
+    const token = (await import("@/lib/api")).getToken();
+    if (!token) return;
+    const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+    const res = await fetch(`${API_BASE}/api/meetings/${id}/calendar.ics`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `whenwe-${id}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleCopy = () => {
     if (meeting?.inviteUrl) navigator.clipboard.writeText(meeting.inviteUrl).catch(() => {});
     setCopied(true);
@@ -90,12 +107,15 @@ export default function ConfirmedPage({ params }: { params: Promise<{ id: string
             <div className="t-body" style={{ fontWeight: 700 }}>캘린더에 추가</div>
             <div className="t-cap">Google · Apple · .ics 파일</div>
           </div>
-          <button style={{
-            background: "var(--color-primary-soft)", color: "var(--color-primary)",
-            border: "none", borderRadius: 10, padding: "6px 12px",
-            fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-          }}>
-            추가
+          <button
+            onClick={handleCalendar}
+            style={{
+              background: "var(--color-primary-soft)", color: "var(--color-primary)",
+              border: "none", borderRadius: 10, padding: "6px 12px",
+              fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+            }}
+          >
+            다운로드
           </button>
         </div>
 

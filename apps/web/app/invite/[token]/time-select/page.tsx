@@ -116,11 +116,33 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
     }
   };
 
-  if (loading || !vm) {
+  if (loading) {
     return (
       <div className="screen white">
         <div className="scroll center">
-          <p className="t-body2">{error ?? "불러오는 중…"}</p>
+          <p className="t-body2">불러오는 중…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !vm) {
+    return (
+      <div className="screen white">
+        <div className="scroll" style={{ padding: "48px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 16, textAlign: "center" }}>
+          <p className="t-body2">{error ?? "시간 정보를 불러오지 못했어요."}</p>
+          <button
+            className="btn outline"
+            onClick={() => { setError(null); setLoading(true); router.refresh(); }}
+          >
+            다시 시도
+          </button>
+          <button
+            style={{ background: "transparent", border: "none", color: "var(--color-text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+            onClick={() => router.push(`/invite/${token}`)}
+          >
+            초대 페이지로 돌아가기
+          </button>
         </div>
       </div>
     );
