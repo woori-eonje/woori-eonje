@@ -126,6 +126,38 @@ MeetingSummary:
 
 ---
 
+## 모임 수정 / 삭제
+
+### 8. `PATCH /api/meetings/{meetingId}` 신규 — 모임 수정
+
+```yaml
+조건: respondedCount === 0 일 때만 허용 (1번 MeetingSummary 필드 추가 선행 필요)
+수정 가능 필드:
+  - title, description, category
+  - startDate, endDate, availableStartTime, availableEndTime, durationHours, responseDeadline
+에러:
+  - 409 RESPONSE_ALREADY_EXISTS: 이미 응답자가 있을 경우 거부
+```
+
+**영향 화면:** 대시보드 / status 페이지에 "모임 수정" 버튼 추가 예정
+**현재 상태:** 모임 수정 불가
+
+---
+
+### 9. `DELETE /api/meetings/{meetingId}` 신규 — 모임 삭제
+
+```yaml
+조건: 언제든 삭제 가능 (모임장만)
+동작: 모임 + 참여자 + 가능시간 + 추천결과 cascade 삭제
+에러:
+  - 403 FORBIDDEN_MEETING_OWNER_ONLY
+```
+
+**영향 화면:** 대시보드 / status 페이지에 "모임 삭제" 버튼 추가 예정
+**현재 상태:** 모임 삭제 불가
+
+---
+
 ## 우선순위 제안
 
 ```
@@ -133,6 +165,7 @@ MeetingSummary:
 2번 (참여자 목록)         — 필수 참석자 UI 전체 블로커
 3번 (aggregate)           — 히트맵 실데이터화, 신규 엔드포인트
 7번 (슬롯 블록화)         — 참여자 UX 핵심 개선, 슬롯 생성 로직 변경
+8+9번 (수정/삭제)         — 모임 관리 기본 기능, 1번 선행 필요
 4+5번 (계정 연동)         — 기능 확장, 도메인 모델 변경 수반
 6번 (특정 날짜 선택)      — 위자드 UX 개선, API 확장
 ```

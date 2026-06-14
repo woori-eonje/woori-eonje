@@ -257,47 +257,55 @@ export default function WizardPage() {
       {step === 2 && (
         <>
           <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
-            <Section q={STEPS[1].q} helper="이 기간 안에서 참여자들의 가능한 시간을 모아드려요.">
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label style={{ fontSize: 13, fontWeight: 700 }}>
-                  후보 기간 시작 <span style={{ color: "var(--color-accent)" }}>*</span>
-                </label>
-                <DatePicker
-                  value={data.from}
-                  onChange={(d) => set({ from: d })}
-                  placeholder="시작일 선택"
-                />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label style={{ fontSize: 13, fontWeight: 700 }}>
-                  후보 기간 종료 <span style={{ color: "var(--color-accent)" }}>*</span>
-                </label>
-                <DatePicker
-                  value={data.to}
-                  onChange={(d) => set({ to: d })}
-                  placeholder="종료일 선택"
-                  fromDate={data.from}
-                />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label style={{ fontSize: 13, fontWeight: 700 }}>
-                  응답 수집 마감일 <span style={{ color: "var(--color-accent)" }}>*</span>
-                </label>
-                <DatePicker
-                  value={data.due}
-                  onChange={(d) => set({ due: d })}
-                  placeholder="마감일 선택"
-                  toDate={data.from}
-                />
-              </div>
-            </Section>
-
-            <div style={{
-              background: "var(--color-baby-blue)", borderRadius: 12,
-              padding: "12px 14px", fontSize: 13, lineHeight: 1.55, letterSpacing: "-0.01em",
-            }}>
-              <b>참고</b> · 응답 수집 마감일은 후보 기간 시작일 이전이어야 해요.
-            </div>
+            {(() => {
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const maxEnd = data.from ? new Date(data.from.getTime() + 13 * 86400000) : undefined;
+              const maxDue = data.from ? new Date(data.from.getTime() - 86400000) : undefined;
+              return (
+                <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <label style={{ fontSize: 13, fontWeight: 700 }}>
+                      후보 기간 시작 <span style={{ color: "var(--color-accent)" }}>*</span>
+                    </label>
+                    <DatePicker
+                      value={data.from}
+                      onChange={(d) => set({ from: d, to: undefined, due: undefined })}
+                      placeholder="시작일 선택"
+                      fromDate={today}
+                    />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <label style={{ fontSize: 13, fontWeight: 700 }}>
+                      후보 기간 종료 <span style={{ color: "var(--color-accent)" }}>*</span>
+                    </label>
+                    <DatePicker
+                      value={data.to}
+                      onChange={(d) => set({ to: d })}
+                      placeholder="종료일 선택"
+                      fromDate={data.from ? new Date(data.from.getTime() + 86400000) : today}
+                      toDate={maxEnd}
+                      disabled={!data.from}
+                    />
+                    {data.from && <div className="t-cap">최대 14일 ({data.from.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })} ~ {maxEnd?.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })})</div>}
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <label style={{ fontSize: 13, fontWeight: 700 }}>
+                      응답 수집 마감일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                    </label>
+                    <DatePicker
+                      value={data.due}
+                      onChange={(d) => set({ due: d })}
+                      placeholder="마감일 선택"
+                      fromDate={today}
+                      toDate={maxDue}
+                      disabled={!data.from}
+                    />
+                    {data.from && <div className="t-cap">후보 기간 시작일 전날까지 선택 가능</div>}
+                  </div>
+                </>
+              );
+            })()}
           </div>
           <div className="bottom-bar">
             <Button block primary disabled={!data.from || !data.to || !data.due} onClick={handleNext}>다음</Button>
@@ -346,8 +354,12 @@ export default function WizardPage() {
                       <input
                         className="input"
                         type="time"
+                        step="3600"
                         value={data.customStart}
-                        onChange={(e) => set({ customStart: e.target.value })}
+                        onChange={(e) => {
+                          const [h] = e.target.value.split(":");
+                          set({ customStart: `${h}:00` });
+                        }}
                         style={{ fontSize: 14 }}
                       />
                     </div>
@@ -357,8 +369,12 @@ export default function WizardPage() {
                       <input
                         className="input"
                         type="time"
+                        step="3600"
                         value={data.customEnd}
-                        onChange={(e) => set({ customEnd: e.target.value })}
+                        onChange={(e) => {
+                          const [h] = e.target.value.split(":");
+                          set({ customEnd: `${h}:00` });
+                        }}
                         style={{ fontSize: 14 }}
                       />
                     </div>
