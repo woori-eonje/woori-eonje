@@ -15,7 +15,7 @@ LLM 코딩 실수를 줄이기 위한 행동 지침. 프로젝트별 지침과 �
 - **아키텍처·기술 스택·렌더링 전략** → `docs/architecture.md`
 - **도메인 규칙·데이터 모델·API 규약·MVP 범위** → `docs/domain.md` *(백엔드 로직/스키마 작업 전 필독)*
 - **개발 명령어·환경 주의·협업·개발 규칙** → `docs/development.md` *(아래에서 자동 로드됨)*
-- **UI/디자인 — 브랜드·색·타입·UI킷 (디자인 SSOT)** → `design-system/` *(화면 작업 전 `design-system/project/SKILL.md`·`README.md` 필독)* · 프로젝트 통합 방법 → `docs/frontend.md`
+- **UI/디자인 — 컴포넌트·토큰·패턴** → `apps/web/app/globals.css`(토큰) · `apps/web/components/`(컴포넌트) · 절대 규칙·카피 톤 → `.claude/agents/screen-builder.md` · 통합 가이드 → `docs/frontend.md`
 - **기획 원본(단일 출처)** → `plan/whenwe_plan_v0.3.pdf`
 - **저해상 와이어프레임 레퍼런스** → `wireframes/whenwe_wireframes.html`
 
