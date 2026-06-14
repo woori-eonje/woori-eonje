@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { StatusPill } from "@/components/primitives";
 import { Calendar, Users, ChevronRight } from "@/components/icons";
 import type { Meeting } from "@/types/meeting";
@@ -9,14 +9,21 @@ interface MeetingCardProps {
   meeting: Meeting;
 }
 
+function resolveHref(meeting: Meeting): string {
+  if (meeting.status === "CONFIRMED") return `/meetings/${meeting.id}/confirmed`;
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  if (!isMobile) return `/meetings/${meeting.id}/dashboard`;
+  if (meeting.status === "READY_TO_CONFIRM") return `/meetings/${meeting.id}/recommendations`;
+  return `/meetings/${meeting.id}/status`;
+}
+
 export function MeetingCard({ meeting }: MeetingCardProps) {
-  const href = meeting.status === "CONFIRMED"
-    ? `/meetings/${meeting.id}/confirmed`
-    : `/meetings/${meeting.id}/dashboard`;
+  const router = useRouter();
 
   return (
-    <Link href={href} style={{ textDecoration: "none" }}>
-      <div style={{
+    <div
+      onClick={() => router.push(resolveHref(meeting))}
+      style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-line)",
         borderRadius: 20, padding: 20,
@@ -75,7 +82,6 @@ export function MeetingCard({ meeting }: MeetingCardProps) {
             <ChevronRight size={16} color="var(--color-maybe-text)" />
           </div>
         )}
-      </div>
-    </Link>
+    </div>
   );
 }
