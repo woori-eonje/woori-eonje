@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Logo } from "@/components/primitives";
 import { Share, Clock, CalendarCheck, PlusCircle } from "@/components/icons";
+import { getToken } from "@/lib/api";
 
 const KICKERS = [
   "친구랑 만날까",
@@ -13,12 +15,14 @@ const KICKERS = [
 ];
 
 export default function LandingPage() {
+  const router = useRouter();
   const [idx, setIdx] = useState(0);
 
   useEffect(() => {
+    if (getToken()) { router.replace("/meetings"); return; }
     const t = setTimeout(() => setIdx((i) => (i + 1) % KICKERS.length), 2200);
     return () => clearTimeout(t);
-  }, [idx]);
+  }, [idx, router]);
 
   return (
     <div className="screen white" style={{ background: "var(--color-bg)" }}>

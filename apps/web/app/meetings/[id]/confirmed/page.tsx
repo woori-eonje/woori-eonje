@@ -137,6 +137,17 @@ export default function ConfirmedPage({ params }: { params: Promise<{ id: string
         >
           {copied ? "링크 복사됨!" : "공유 링크 복사"}
         </Button>
+        <button
+          onClick={() => router.push("/meetings")}
+          style={{
+            background: "transparent", border: "none",
+            color: "var(--color-text-2)", fontFamily: "inherit",
+            fontSize: 13, fontWeight: 600, padding: "6px 0",
+            cursor: "pointer", textAlign: "center" as const, width: "100%",
+          }}
+        >
+          내 모임 목록으로 →
+        </button>
       </div>
     </div>
   );

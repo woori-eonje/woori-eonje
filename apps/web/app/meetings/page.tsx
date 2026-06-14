@@ -8,6 +8,7 @@ import { PlusCircle } from "@/components/icons";
 import { MeetingCard } from "@/components/meeting/MeetingCard";
 import type { Meeting } from "@/types/meeting";
 import { listMeetings } from "@/lib/meetings";
+import { logout } from "@/lib/auth";
 import { ApiError, getToken } from "@/lib/api";
 import type { MeetingSummary } from "@whenwe/types";
 
@@ -89,6 +90,11 @@ export default function MyMeetingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const handleLogout = async () => {
+    await logout().catch(() => {});
+    router.push("/login");
+  };
+
   useEffect(() => {
     if (!getToken()) {
       router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
@@ -122,10 +128,16 @@ export default function MyMeetingsPage() {
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 12 }}>
           <Logo size={24} />
-          <Link href="/meetings/new" className="btn primary" style={{ height: 36, padding: "0 14px", fontSize: 13 }}>
-            <PlusCircle size={15} color="#fff" />
-            <span>새 모임</span>
-          </Link>
+          <button
+            onClick={handleLogout}
+            style={{
+              background: "transparent", border: "none",
+              color: "var(--color-text-muted)", fontFamily: "inherit",
+              fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "4px 0",
+            }}
+          >
+            로그아웃
+          </button>
         </div>
         <div className="tab-bar" style={{ borderBottom: "none" }}>
           {TABS.map((t) => (
@@ -169,6 +181,23 @@ export default function MyMeetingsPage() {
           filtered.map((m) => <MeetingCard key={m.id} meeting={m} />)
         )}
       </div>
+
+      {/* 플로팅 새 모임 버튼 */}
+      <Link
+        href="/meetings/new"
+        style={{
+          position: "fixed", bottom: 24, right: 20, zIndex: 50,
+          width: 56, height: 56, borderRadius: 999,
+          background: "var(--color-primary)", color: "#fff",
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 4px 16px rgba(26,149,98,0.35)",
+          textDecoration: "none",
+          transition: "transform 160ms, box-shadow 160ms",
+        }}
+        aria-label="새 모임 만들기"
+      >
+        <PlusCircle size={26} color="#fff" />
+      </Link>
     </div>
   );
 }
