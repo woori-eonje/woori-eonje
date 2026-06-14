@@ -96,7 +96,7 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
       const wantWeekend = kind === "weekend";
       days
         .filter((d) => d.weekend === wantWeekend)
-        .forEach((d) => d.slots.forEach((s) => (next[s.slotId] = "available")));
+        .forEach((d) => d.slots.forEach((s) => (next[s.slotId] = mode)));
       return next;
     });
   };
@@ -196,10 +196,10 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekday")}>
-            평일 전체 가능
+            평일 전체 선택
           </button>
           <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekend")}>
-            주말 전체 가능
+            주말 전체 선택
           </button>
           <button className="chip danger" style={{ justifyContent: "center" }} onClick={() => onQuick("reset")}>
             전체 초기화

@@ -118,10 +118,10 @@ function OptionCard({ icon, title, subtitle, active, onClick }: OptionCardProps)
 /* ── Duration quick-select ── */
 const DURATIONS = ["1시간", "2시간", "3시간", "4시간", "5시간+"];
 const TIME_RANGES = [
-  { id: "weekday-eve", label: "평일 저녁", sub: "18:00 – 23:00" },
-  { id: "weekday-day", label: "평일 낮",   sub: "09:00 – 18:00" },
-  { id: "weekend",     label: "주말 전체", sub: "09:00 – 22:00" },
-  { id: "custom",      label: "직접 설정", sub: "시작 ~ 종료 입력" },
+  { id: "evening", label: "저녁",      sub: "18:00 – 23:00" },
+  { id: "daytime", label: "낮",        sub: "09:00 – 18:00" },
+  { id: "allday",  label: "하루 전체", sub: "09:00 – 22:00" },
+  { id: "custom",  label: "직접 설정", sub: "시작 ~ 종료 입력" },
 ];
 
 const KIND_TO_CAT: Record<string, MeetingCategory> = {
@@ -131,10 +131,10 @@ const DURATION_H: Record<string, number> = {
   "1시간": 1, "2시간": 2, "3시간": 3, "4시간": 4, "5시간+": 5,
 };
 const RANGE_TIME: Record<string, { s: string; e: string }> = {
-  "weekday-eve": { s: "18:00", e: "23:00" },
-  "weekday-day": { s: "09:00", e: "18:00" },
-  "weekend":     { s: "09:00", e: "22:00" },
-  "custom":      { s: "09:00", e: "23:00" },
+  "evening": { s: "18:00", e: "23:00" },
+  "daytime": { s: "09:00", e: "18:00" },
+  "allday":  { s: "09:00", e: "22:00" },
+  "custom":  { s: "09:00", e: "23:00" },
 };
 function toYMD(d: Date) { return d.toLocaleDateString("sv"); }
 function toDeadlineISO(d: Date) { return `${toYMD(d)}T23:59:00+09:00`; }
@@ -152,7 +152,7 @@ export default function WizardPage() {
   const [data, setData] = useState<WizardData>({
     name: "", desc: "", kind: "",
     from: undefined, to: undefined, due: undefined,
-    duration: "", range: "",
+    duration: "", range: "evening",
     customStart: "09:00", customEnd: "22:00",
   });
   const [copied, setCopied] = useState(false);
@@ -169,6 +169,7 @@ export default function WizardPage() {
 
   const handleNext = async () => {
     if (step !== 3) { setStep((s) => Math.min(s + 1, 5)); return; }
+    if (meetingId !== null) { setStep(4); return; }  // 이미 생성된 경우 재사용
     setCreating(true);
     setCreateError(null);
     try {
@@ -256,10 +257,10 @@ export default function WizardPage() {
       {step === 2 && (
         <>
           <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
-            <Section q={STEPS[1].q} helper="이 기간 안에서 가능한 시간을 모아드려요. 응답 마감일은 조율 종료일보다 빨라야 해요.">
+            <Section q={STEPS[1].q} helper="이 기간 안에서 참여자들의 가능한 시간을 모아드려요.">
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <label style={{ fontSize: 13, fontWeight: 700 }}>
-                  조율 시작일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                  후보 기간 시작 <span style={{ color: "var(--color-accent)" }}>*</span>
                 </label>
                 <DatePicker
                   value={data.from}
@@ -269,7 +270,7 @@ export default function WizardPage() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <label style={{ fontSize: 13, fontWeight: 700 }}>
-                  조율 종료일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                  후보 기간 종료 <span style={{ color: "var(--color-accent)" }}>*</span>
                 </label>
                 <DatePicker
                   value={data.to}
@@ -280,13 +281,13 @@ export default function WizardPage() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <label style={{ fontSize: 13, fontWeight: 700 }}>
-                  응답 마감일 <span style={{ color: "var(--color-accent)" }}>*</span>
+                  응답 수집 마감일 <span style={{ color: "var(--color-accent)" }}>*</span>
                 </label>
                 <DatePicker
                   value={data.due}
                   onChange={(d) => set({ due: d })}
                   placeholder="마감일 선택"
-                  toDate={data.to}
+                  toDate={data.from}
                 />
               </div>
             </Section>
@@ -295,7 +296,7 @@ export default function WizardPage() {
               background: "var(--color-baby-blue)", borderRadius: 12,
               padding: "12px 14px", fontSize: 13, lineHeight: 1.55, letterSpacing: "-0.01em",
             }}>
-              <b>참고</b> · 보통 응답 마감일은 조율 종료일 2–3일 전이 좋아요.
+              <b>참고</b> · 응답 수집 마감일은 후보 기간 시작일 이전이어야 해요.
             </div>
           </div>
           <div className="bottom-bar">
