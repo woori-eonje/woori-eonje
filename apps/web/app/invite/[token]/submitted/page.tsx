@@ -1,16 +1,55 @@
 "use client";
 
-import { use } from "react";
+import { use, useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar, Button } from "@/components/primitives";
+import { fetchInvite, toInviteVM, type InviteVM } from "@/lib/invite";
+import { loadParticipant } from "@/lib/participant";
+import { fetchMyPicks } from "@/lib/availability";
+import type { SlotState } from "@/types/meeting";
+
+function deadlineLeft(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return "마감됨";
+  const h = Math.floor(diff / 3600000);
+  return h < 24 ? `${h}시간` : `${Math.floor(h / 24)}일 ${h % 24}시간`;
+}
 
 export default function SubmittedPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
   const router = useRouter();
+  const [vm, setVm] = useState<InviteVM | null>(null);
+  const [responseDeadline, setResponseDeadline] = useState<string | null>(null);
+  const [picks, setPicks] = useState<Record<number, SlotState>>({});
+
+  useEffect(() => {
+    const p = loadParticipant(token);
+    if (!p) return;
+    fetchInvite(token)
+      .then(async (dto) => {
+        setVm(toInviteVM(dto));
+        setResponseDeadline(dto.responseDeadline);
+        const myPicks = await fetchMyPicks(dto.meetingId, p.editToken);
+        setPicks(myPicks);
+      })
+      .catch(() => {});
+  }, [token]);
+
+  const summary = useMemo(() => {
+    let ok = 0, m = 0, x = 0;
+    Object.values(picks).forEach((s) => {
+      if (s === "available") ok++;
+      else if (s === "maybe") m++;
+      else x++;
+    });
+    return { ok, m, x };
+  }, [picks]);
+
+  const hasData = Object.keys(picks).length > 0;
 
   return (
     <div className="screen">
-      <TopBar title="6월 전시 모임" />
+      <TopBar title={vm?.title ?? "모임"} />
 
       <div style={{
         padding: "16px 20px",
@@ -49,10 +88,16 @@ export default function SubmittedPage({ params }: { params: Promise<{ token: str
           display: "flex", flexDirection: "column", gap: 6,
         }}>
           <div className="t-cap">내 응답 요약</div>
-          <div className="t-body" style={{ fontWeight: 700 }}>가능 8개 · 애매 4개 · 불가 0개</div>
-          <div className="t-cap">
-            마감까지 <b style={{ color: "var(--color-primary)" }}>2일 6시간</b> 남았어요
+          <div className="t-body" style={{ fontWeight: 700 }}>
+            {hasData
+              ? `가능 ${summary.ok}개 · 애매 ${summary.m}개 · 불가 ${summary.x}개`
+              : "불러오는 중…"}
           </div>
+          {responseDeadline && (
+            <div className="t-cap">
+              마감까지 <b style={{ color: "var(--color-primary)" }}>{deadlineLeft(responseDeadline)}</b> 남았어요
+            </div>
+          )}
         </div>
       </div>
 

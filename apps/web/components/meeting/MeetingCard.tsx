@@ -12,7 +12,7 @@ interface MeetingCardProps {
 export function MeetingCard({ meeting }: MeetingCardProps) {
   const href = meeting.status === "CONFIRMED"
     ? `/meetings/${meeting.id}/confirmed`
-    : `/meetings/${meeting.id}/recommendations`;
+    : `/meetings/${meeting.id}/dashboard`;
 
   return (
     <Link href={href} style={{ textDecoration: "none" }}>
