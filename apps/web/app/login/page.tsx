@@ -4,14 +4,51 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Logo } from "@/components/primitives";
+import { login, signup } from "@/lib/auth";
+import { ApiError } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [nickname, setNickname] = useState("");
   const [isSignup, setIsSignup] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const valid = email.includes("@") && password.length >= 6;
+  const valid = isSignup
+    ? email.includes("@") && password.length >= 8 && nickname.trim().length >= 1
+    : email.includes("@") && password.length >= 8;
+
+  const handleSubmit = async () => {
+    if (!valid || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      if (isSignup) {
+        await signup(email, password, nickname.trim());
+        // 가입 후 자동 로그인
+        await login(email, password);
+      } else {
+        await login(email, password);
+      }
+      router.push("/meetings");
+    } catch (e) {
+      if (e instanceof ApiError) {
+        if (e.code === "EMAIL_ALREADY_EXISTS") {
+          setError("이미 사용 중인 이메일이에요.");
+        } else if (e.code === "INVALID_CREDENTIALS") {
+          setError("이메일 또는 비밀번호가 맞지 않아요.");
+        } else {
+          setError(e.message);
+        }
+      } else {
+        setError("잠시 후 다시 시도해주세요.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="screen white" style={{ background: "var(--color-bg)" }}>
@@ -38,7 +75,13 @@ export default function LoginPage() {
           {isSignup && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <label style={{ fontSize: 13, fontWeight: 700 }}>이름 (닉네임)</label>
-              <input className="input" placeholder="이름을 입력해주세요" />
+              <input
+                className="input"
+                placeholder="이름을 입력해주세요"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                maxLength={30}
+              />
             </div>
           )}
 
@@ -53,21 +96,30 @@ export default function LoginPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <label style={{ fontSize: 13, fontWeight: 700 }}>비밀번호</label>
             <input
-              className="input" type="password" placeholder="6자 이상"
+              className="input" type="password" placeholder="8자 이상"
               value={password} onChange={(e) => setPassword(e.target.value)}
             />
           </div>
 
+          {error && (
+            <div style={{
+              background: "var(--color-accent-soft)", color: "var(--color-accent)",
+              borderRadius: 10, padding: "10px 14px", fontSize: 13, fontWeight: 600,
+            }}>
+              {error}
+            </div>
+          )}
+
           <button
-            className={`btn primary block ${!valid ? "opacity-50" : ""}`}
-            disabled={!valid}
-            onClick={() => router.push("/meetings")}
+            className={`btn primary block ${(!valid || loading) ? "opacity-50" : ""}`}
+            disabled={!valid || loading}
+            onClick={handleSubmit}
           >
-            {isSignup ? "가입하기" : "로그인"}
+            {loading ? "처리 중..." : isSignup ? "가입하기" : "로그인"}
           </button>
 
           <button
-            onClick={() => setIsSignup((s) => !s)}
+            onClick={() => { setIsSignup((s) => !s); setError(null); }}
             style={{
               background: "transparent", border: "none",
               color: "var(--color-text-2)", fontFamily: "inherit",

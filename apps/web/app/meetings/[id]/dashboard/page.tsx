@@ -1,11 +1,29 @@
 "use client";
 
-import { use, useState, useMemo } from "react";
+import { use, useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { formatInTimeZone } from "date-fns-tz";
+import { ko } from "date-fns/locale";
 import { Logo, Button } from "@/components/primitives";
 import { ParticipantRow } from "@/components/meeting/ParticipantRow";
 import { Check, Clock, PlusCircle, Copy, Share } from "@/components/icons";
-import type { Recommendation } from "@/types/meeting";
+import { getMeeting, getRecommendations, confirmMeeting } from "@/lib/meetings";
+import { ApiError, getToken } from "@/lib/api";
+import type { MeetingDetail, Recommendation as ApiRec } from "@whenwe/types";
+
+const TZ = "Asia/Seoul";
+const CATEGORY_LABEL: Record<string, string> = {
+  FRIEND: "친구 모임", STUDY: "스터디", BUSINESS: "비즈니스",
+};
+function fmtTime(iso: string) { return formatInTimeZone(iso, TZ, "a h:mm", { locale: ko }); }
+function fmtDateLabel(iso: string) { return formatInTimeZone(iso, TZ, "M월 d일 EEEE", { locale: ko }); }
+function fmtDeadlineLeft(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return "마감됨";
+  const h = Math.floor(diff / 3600000);
+  return h < 24 ? `${h}시간 남음` : `${Math.floor(h / 24)}일 ${h % 24}시간 남음`;
+}
 
 /* ── 상수 ── */
 const DAYS = [
@@ -20,26 +38,6 @@ const DAYS = [
 const HOURS = ["18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00"];
 const TOTAL = 6;
 
-const ALL_RECS: Recommendation[] = [
-  {
-    rank: 1, when: "6.8 (토) 오후 2:00 – 4:00", dateLabel: "6월 8일 토요일", time: "오후 2:00 – 4:00",
-    availableCount: 5, maybeCount: 1, unavailableCount: 0, requiredSatisfied: true,
-    participants: [
-      { name: "소미", status: "available", required: true },
-      { name: "지현", status: "available", required: true },
-      { name: "민수", status: "available" },
-      { name: "유나", status: "available" },
-      { name: "태오", status: "available" },
-      { name: "하린", status: "maybe" },
-    ],
-  },
-  { rank: 2, when: "6.6 (목) 오후 7:00 – 9:00",  dateLabel: "6월 6일 목요일", time: "오후 7:00 – 9:00",  availableCount: 4, maybeCount: 1, unavailableCount: 1, requiredSatisfied: false, note: "필수 1명 애매",
-    participants: [{ name: "소미", status: "available", required: true }, { name: "지현", status: "maybe", required: true }, { name: "민수", status: "available" }, { name: "유나", status: "available" }, { name: "태오", status: "available" }, { name: "하린", status: "unavail" }] },
-  { rank: 3, when: "6.10 (월) 오후 8:00 – 10:00", dateLabel: "6월 10일 월요일", time: "오후 8:00 – 10:00", availableCount: 3, maybeCount: 2, unavailableCount: 0, requiredSatisfied: true,
-    participants: [{ name: "소미", status: "available", required: true }, { name: "지현", status: "available", required: true }, { name: "민수", status: "maybe" }, { name: "유나", status: "available" }, { name: "태오", status: "maybe" }, { name: "하린", status: "available" }] },
-  { rank: 4, when: "6.7 (일) 오후 3:00 – 5:00",   dateLabel: "6월 7일 일요일",  time: "오후 3:00 – 5:00",  availableCount: 3, maybeCount: 1, unavailableCount: 2, requiredSatisfied: false, note: "필수 1명 불가", participants: [] },
-  { rank: 5, when: "6.5 (금) 오후 9:00 – 11:00",   dateLabel: "6월 5일 금요일",  time: "오후 9:00 – 11:00", availableCount: 3, maybeCount: 0, unavailableCount: 3, requiredSatisfied: true,  participants: [] },
-];
 
 /* ── 히트맵 데이터 ── */
 function buildAgg() {
@@ -142,7 +140,20 @@ function AppHeader() {
 /* ══════════════════════════════════════════════════════
    미팅 히어로 스트립
 ══════════════════════════════════════════════════════ */
-function MeetingHero() {
+function MeetingHero({ meeting }: { meeting: MeetingDetail | null }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    if (meeting?.inviteUrl) navigator.clipboard.writeText(meeting.inviteUrl).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const startD = meeting ? new Date(meeting.startDate) : null;
+  const endD = meeting ? new Date(meeting.endDate) : null;
+  const dateRange = startD && endD
+    ? `${startD.getMonth() + 1}.${startD.getDate()} — ${endD.getMonth() + 1}.${endD.getDate()}`
+    : "–";
+
   return (
     <div style={{
       background: "var(--color-surface)",
@@ -184,20 +195,20 @@ function MeetingHero() {
       {/* 모임 정보 */}
       <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, color: "var(--color-primary)" }}>
-          친구 모임
+          {meeting ? CATEGORY_LABEL[meeting.category] : <span className="skeleton" style={{ display: "inline-block", width: 60, height: 14, borderRadius: 4 }} />}
         </div>
         <h1 style={{ margin: "6px 0 0", fontSize: 26, fontWeight: 800, letterSpacing: "-0.035em", lineHeight: 1.25 }}>
-          6월 전시 모임
+          {meeting?.title ?? <span className="skeleton" style={{ display: "inline-block", width: 160, height: 26, borderRadius: 8 }} />}
         </h1>
         <p style={{ margin: "8px 0 0", fontSize: 14, color: "var(--color-text-2)", letterSpacing: "-0.01em", lineHeight: 1.5 }}>
-          6월 초에 전시 보러 갈 사람들 일정 조율
+          {meeting?.description ?? ""}
         </p>
         <div style={{ display: "flex", gap: 18, marginTop: 12, flexWrap: "wrap" as const }}>
           {[
-            { label: "조율 기간", value: "6.1 — 6.14" },
-            { label: "예상 소요", value: "2시간" },
-            { label: "응답",     value: "5/6명", color: "var(--color-primary)" },
-            { label: "마감까지", value: "2일 6시간" },
+            { label: "조율 기간", value: dateRange },
+            { label: "예상 소요", value: meeting ? `${meeting.durationHours}시간` : "–" },
+            { label: "참여자",    value: meeting ? `${meeting.participantCount}명` : "–", color: "var(--color-primary)" },
+            { label: "마감까지", value: meeting ? fmtDeadlineLeft(meeting.responseDeadline) : "–" },
           ].map(({ label, value, color }) => (
             <span key={label} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, fontSize: 13, color: "var(--color-text-2)", whiteSpace: "nowrap" as const }}>
               {label} <b style={{ color: color ?? "var(--color-text)", fontWeight: 700 }}>{value}</b>
@@ -212,7 +223,7 @@ function MeetingHero() {
           <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--color-primary)", display: "inline-block" }} />
           응답 수집 중
         </span>
-        <button style={{
+        <button onClick={handleCopy} style={{
           height: 44, padding: "0 18px", borderRadius: 14,
           border: "1px solid var(--color-primary)", background: "#fff",
           color: "var(--color-primary)", fontFamily: "inherit",
@@ -221,18 +232,7 @@ function MeetingHero() {
           display: "inline-flex", alignItems: "center", gap: 8,
           transition: "background 160ms",
         }}>
-          <Copy size={15} color="var(--color-primary)" /> 링크 복사
-        </button>
-        <button style={{
-          height: 44, padding: "0 18px", borderRadius: 14,
-          border: "none", background: "var(--color-primary)",
-          color: "#fff", fontFamily: "inherit",
-          fontSize: 14, fontWeight: 700, letterSpacing: "-0.015em",
-          cursor: "pointer", whiteSpace: "nowrap" as const,
-          display: "inline-flex", alignItems: "center", gap: 8,
-          transition: "background 160ms",
-        }}>
-          <Share size={15} color="#fff" /> 공유
+          <Copy size={15} color="var(--color-primary)" /> {copied ? "복사됨!" : "링크 복사"}
         </button>
       </div>
     </div>
@@ -440,9 +440,25 @@ function AggregateTab() {
 /* ══════════════════════════════════════════════════════
    추천 결과 탭
 ══════════════════════════════════════════════════════ */
-function RecommendationsTab() {
+function RecommendationsTab({ recs, meetingId, onConfirmed }: {
+  recs: ApiRec[];
+  meetingId: number;
+  onConfirmed: () => void;
+}) {
   const [selected, setSelected] = useState(1);
-  const rec = ALL_RECS.find((r) => r.rank === selected) ?? ALL_RECS[0];
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const router = useRouter();
+
+  if (recs.length === 0) {
+    return (
+      <div style={{ padding: "48px 0", textAlign: "center" }}>
+        <p className="t-body2">아직 추천 결과가 없어요. 참여자 응답 후 자동으로 계산돼요.</p>
+      </div>
+    );
+  }
+
+  const rec = recs.find((r) => r.rank === selected) ?? recs[0];
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", gap: 24, alignItems: "start" }}>
@@ -460,8 +476,10 @@ function RecommendationsTab() {
           </span>
 
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="t-body2">{rec.dateLabel}</div>
-            <h2 style={{ margin: "6px 0 0", fontSize: 36, fontWeight: 900, letterSpacing: "-0.045em", lineHeight: 1.15 }}>{rec.time}</h2>
+            <div className="t-body2">{fmtDateLabel(rec.startAt)}</div>
+            <h2 style={{ margin: "6px 0 0", fontSize: 36, fontWeight: 900, letterSpacing: "-0.045em", lineHeight: 1.15 }}>
+              {fmtTime(rec.startAt)} – {fmtTime(rec.endAt)}
+            </h2>
             <div style={{ marginTop: 18, fontSize: 16, lineHeight: 1.6, letterSpacing: "-0.015em" }}>
               이 시간엔{" "}
               <b style={{ color: "var(--color-primary)" }}>{rec.availableCount}명이 가능</b>
@@ -470,33 +488,24 @@ function RecommendationsTab() {
               <span style={{ color: "var(--color-text-2)" }}>예요.</span>
             </div>
             <div style={{ marginTop: 14 }}>
-              {rec.requiredSatisfied ? (
+              {rec.requiredParticipantSatisfied ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, background: "var(--color-primary-soft)", color: "var(--color-primary)", fontSize: 13, fontWeight: 700 }}>
                   <Check size={14} color="var(--color-primary)" stroke={2.5} /> 필수 참석자 모두 가능
                 </span>
               ) : (
                 <span style={{ display: "inline-flex", padding: "8px 12px", borderRadius: 10, background: "var(--color-maybe-soft)", color: "var(--color-maybe-text)", fontSize: 13, fontWeight: 700 }}>
-                  ※ {rec.note}
+                  필수 참석자 일부 참여 불가
                 </span>
               )}
             </div>
           </div>
-
-          {rec.participants && rec.participants.length > 0 && (
-            <div style={{ width: 220, flex: "none", borderLeft: "1px solid var(--color-line)", paddingLeft: 28 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 12 }}>참여자 응답</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {rec.participants.map((p) => <ParticipantRow key={p.name} {...p} />)}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* 순위 목록 */}
         <div>
           <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 12 }}>다른 추천 시간</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {ALL_RECS.map((r) => (
+            {recs.map((r) => (
               <button
                 key={r.rank}
                 type="button"
@@ -518,15 +527,16 @@ function RecommendationsTab() {
                   borderRadius: 999, flex: "none",
                 }}>{r.rank}순위</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>{r.when}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                    {formatInTimeZone(r.startAt, TZ, "M.d (EEE)", { locale: ko })} {fmtTime(r.startAt)} – {fmtTime(r.endAt)}
+                  </div>
                   <div style={{ fontSize: 12, marginTop: 3, color: "var(--color-text-2)" }}>
                     <b style={{ color: "var(--color-primary)" }}>가능 {r.availableCount}</b>
                     {" · "}<span style={{ color: "var(--color-maybe-text)" }}>애매 {r.maybeCount}</span>
                     {" · "}<span style={{ color: "var(--color-text-muted)" }}>불가 {r.unavailableCount}</span>
-                    {r.note && <span style={{ color: "var(--color-maybe-text)", marginLeft: 6 }}>· {r.note}</span>}
                   </div>
                 </div>
-                {r.requiredSatisfied && <span className="pill ok" style={{ height: 24, padding: "0 10px", fontSize: 11, flex: "none" }}>필수 OK</span>}
+                {r.requiredParticipantSatisfied && <span className="pill ok" style={{ height: 24, padding: "0 10px", fontSize: 11, flex: "none" }}>필수 OK</span>}
                 <span style={{ color: selected === r.rank ? "var(--color-primary)" : "var(--color-text-muted)", fontSize: 18, transition: "color 160ms, transform 160ms", transform: selected === r.rank ? "translateX(2px)" : "none" }}>›</span>
               </button>
             ))}
@@ -539,48 +549,36 @@ function RecommendationsTab() {
         <div className="card tight" style={{ padding: 22, position: "relative", overflow: "hidden" }}>
           <span style={{ position: "absolute", left: 0, top: 18, bottom: 18, width: 3, borderRadius: 3, background: "var(--color-primary)" }} aria-hidden="true" />
           <div className="t-cap" style={{ fontWeight: 800, color: "var(--color-primary)", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>이 시간으로</div>
-          <h3 style={{ margin: "4px 0 2px", fontSize: 20, fontWeight: 800, letterSpacing: "-0.025em" }}>{rec.time}</h3>
-          <p className="t-cap" style={{ marginBottom: 14 }}>{rec.dateLabel}</p>
-          <Button block primary leftIcon={<Check size={18} color="#fff" stroke={2.5} />} onClick={() => {}}>
-            이 시간으로 확정
+          <h3 style={{ margin: "4px 0 2px", fontSize: 20, fontWeight: 800, letterSpacing: "-0.025em" }}>
+            {fmtTime(rec.startAt)} – {fmtTime(rec.endAt)}
+          </h3>
+          <p className="t-cap" style={{ marginBottom: 14 }}>{fmtDateLabel(rec.startAt)}</p>
+          {confirmError && <p style={{ fontSize: 13, color: "var(--color-accent)", margin: "0 0 8px" }}>{confirmError}</p>}
+          <Button
+            block primary
+            disabled={confirming}
+            leftIcon={<Check size={18} color="#fff" stroke={2.5} />}
+            onClick={async () => {
+              setConfirming(true);
+              setConfirmError(null);
+              try {
+                await confirmMeeting(meetingId, rec.recommendationId);
+                onConfirmed();
+                router.push(`/meetings/${meetingId}/confirmed`);
+              } catch (e) {
+                setConfirmError(e instanceof ApiError ? e.message : "확정 중 오류가 생겼어요.");
+                setConfirming(false);
+              }
+            }}
+          >
+            {confirming ? "확정 중…" : "이 시간으로 확정"}
           </Button>
-          <button style={{ display: "block", width: "100%", marginTop: 8, background: "transparent", border: "none", color: "var(--color-text-2)", fontFamily: "inherit", fontSize: 13, padding: "6px 0", cursor: "pointer" }}>
-            조건 다시 검토
-          </button>
         </div>
 
         <div className="card tight" style={{ padding: 22, position: "relative", overflow: "hidden" }}>
           <span style={{ position: "absolute", top: -20, right: -16, width: 70, height: 70, borderRadius: 999, background: "var(--color-lavender)", opacity: 0.5 }} aria-hidden="true" />
           <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 10 }}>모임 정보</div>
-          <h3 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 800, letterSpacing: "-0.025em" }}>6월 전시 모임</h3>
-          <p className="t-body2" style={{ marginBottom: 14 }}>6월 초에 전시 보러 갈 사람들 일정 조율</p>
-          <div className="divider" />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 14 }}>
-            {[
-              { label: "조율 기간", value: "6.1 — 6.14" },
-              { label: "예상 소요", value: "2시간" },
-              { label: "응답",     value: "5/6명", color: "var(--color-primary)" },
-              { label: "응답 마감", value: "5.30 (금)" },
-            ].map(({ label, value, color }) => (
-              <div key={label}>
-                <div className="t-cap">{label}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2, color: color ?? "var(--color-text)" }}>{value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="card tight" style={{ padding: 22 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 10 }}>필수 참석자</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
-            {["소미", "지현"].map((p) => (
-              <span key={p} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "var(--color-accent-soft)", color: "var(--color-accent)", borderRadius: 999, fontSize: 12, fontWeight: 800 }}>
-                <span style={{ width: 16, height: 16, borderRadius: 999, background: "var(--color-accent)", color: "#fff", fontSize: 9, fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{p[0]}</span>
-                {p}
-              </span>
-            ))}
-          </div>
-          <p className="t-cap" style={{ marginTop: 12 }}>필수 참석자가 모두 가능한 시간을 우선해서 추천해요.</p>
+          <p className="t-cap" style={{ marginBottom: 14, color: "var(--color-text-2)" }}>가용 슬롯이 있어야 추천이 계산돼요.</p>
         </div>
       </aside>
     </div>
@@ -591,8 +589,24 @@ function RecommendationsTab() {
    페이지
 ══════════════════════════════════════════════════════ */
 export default function DashboardPage({ params }: { params: Promise<{ id: string }> }) {
-  use(params);
+  const { id } = use(params);
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("aggregate");
+  const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
+  const [recs, setRecs] = useState<ApiRec[]>([]);
+
+  useEffect(() => {
+    if (!getToken()) { router.replace("/login"); return; }
+    const mid = Number(id);
+    getMeeting(mid)
+      .then(setMeeting)
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace("/login");
+      });
+    getRecommendations(mid)
+      .then((res) => setRecs(res.recommendations))
+      .catch(() => {});
+  }, [id, router]);
 
   return (
     <div style={{ minHeight: "100dvh", background: "var(--color-bg)" }}>
@@ -603,13 +617,15 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
         <div style={{ fontSize: 13, color: "var(--color-text-2)", letterSpacing: "-0.01em", marginBottom: 18 }}>
           <Link href="/meetings" style={{ color: "var(--color-text-muted)", textDecoration: "none" }}>내 모임</Link>
           <span style={{ margin: "0 6px", color: "var(--color-text-muted)" }}>›</span>
-          <span style={{ color: "var(--color-text)", fontWeight: 700 }}>6월 전시 모임</span>
+          <span style={{ color: "var(--color-text)", fontWeight: 700 }}>{meeting?.title ?? "–"}</span>
         </div>
 
-        <MeetingHero />
+        <MeetingHero meeting={meeting} />
         <PageTabs tab={tab} setTab={setTab} />
 
-        {tab === "aggregate" ? <AggregateTab /> : <RecommendationsTab />}
+        {tab === "aggregate"
+          ? <AggregateTab />
+          : <RecommendationsTab recs={recs} meetingId={Number(id)} onConfirmed={() => setRecs([])} />}
       </main>
     </div>
   );

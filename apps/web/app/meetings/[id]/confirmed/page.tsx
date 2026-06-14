@@ -1,22 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { formatInTimeZone } from "date-fns-tz";
+import { ko } from "date-fns/locale";
 import { TopBar, Button, StatusPill } from "@/components/primitives";
 import { Calendar, Share } from "@/components/icons";
+import { getMeeting } from "@/lib/meetings";
+import { ApiError, getToken } from "@/lib/api";
+import type { MeetingDetail } from "@whenwe/types";
 
-const PARTICIPANTS = ["소미", "지현", "민수", "유나", "태오", "하린"];
-const AVATAR_BG = ["#1A9562","#D6E7FF","#E6DBF7","#F5AB54","#1A9562","#D6E7FF"];
-const AVATAR_FG = ["#fff","#333","#333","#fff","#fff","#333"];
+const TZ = "Asia/Seoul";
 
-export default function ConfirmedPage() {
+export default function ConfirmedPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
+  const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
   const [copied, setCopied] = useState(false);
 
+  useEffect(() => {
+    if (!getToken()) { router.replace("/login"); return; }
+    getMeeting(Number(id))
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace("/login");
+      })
+      .then((m) => { if (m) setMeeting(m); });
+  }, [id, router]);
+
   const handleCopy = () => {
+    if (meeting?.inviteUrl) navigator.clipboard.writeText(meeting.inviteUrl).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const confirmedDateLine = meeting?.confirmedStartAt
+    ? formatInTimeZone(meeting.confirmedStartAt, TZ, "M.d (EEE)", { locale: ko })
+    : null;
+  const confirmedTimeLine = (meeting?.confirmedStartAt && meeting?.confirmedEndAt)
+    ? `${formatInTimeZone(meeting.confirmedStartAt, TZ, "a h:mm", { locale: ko })} – ${formatInTimeZone(meeting.confirmedEndAt, TZ, "h:mm")}`
+    : null;
 
   return (
     <div className="screen">
@@ -38,40 +60,21 @@ export default function ConfirmedPage() {
             <path d="M24 30 Q32 36 40 30" stroke="#fff" strokeWidth="2" fill="none" strokeLinecap="round" />
           </svg>
 
-          <div className="t-cap" style={{ color: "var(--color-primary)", fontWeight: 800 }}>6월 전시 모임 · 확정</div>
+          <div className="t-cap" style={{ color: "var(--color-primary)", fontWeight: 800 }}>{meeting?.title ?? "모임"} · 확정</div>
           <h2 style={{ margin: 0, fontSize: 28, fontWeight: 900, lineHeight: 1.2, letterSpacing: "-0.04em" }}>
-            6.8 (토)<br />오후 2:00 – 4:00
+            {confirmedDateLine ?? <span className="skeleton" style={{ display: "inline-block", width: 80, height: 28, borderRadius: 8 }} />}<br />
+            {confirmedTimeLine ?? <span className="skeleton" style={{ display: "inline-block", width: 140, height: 28, borderRadius: 8 }} />}
           </h2>
           <div className="dashed-divider" />
-          <p className="t-body2">6월 초에 전시 보러 갈 사람들 일정 조율</p>
+          <p className="t-body2">{meeting?.description ?? ""}</p>
         </div>
 
         {/* Participants */}
         <div className="card tight" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div className="t-cap" style={{ color: "var(--color-text-2)", fontWeight: 800, textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>
-            참여자 {PARTICIPANTS.length}명
+            참여자 {meeting?.participantCount ?? "–"}명
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 8 }}>
-            {PARTICIPANTS.map((p, i) => (
-              <span key={p} style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                padding: "6px 10px",
-                background: "var(--color-bg)", borderRadius: 999,
-                fontSize: 13, fontWeight: 700,
-              }}>
-                <span style={{
-                  width: 18, height: 18, borderRadius: 999,
-                  background: AVATAR_BG[i % AVATAR_BG.length],
-                  color: AVATAR_FG[i % AVATAR_FG.length],
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 10, fontWeight: 800,
-                }}>
-                  {p[0]}
-                </span>
-                {p}
-              </span>
-            ))}
-          </div>
+          {!meeting && <div className="skeleton" style={{ height: 32, borderRadius: 8 }} />}
         </div>
 
         {/* Calendar row */}

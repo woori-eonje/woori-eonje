@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar, Button } from "@/components/primitives";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Users, BookOpen, Briefcase, Copy, Share } from "@/components/icons";
+import { createMeeting } from "@/lib/meetings";
+import { ApiError, getToken } from "@/lib/api";
+import type { MeetingCategory } from "@whenwe/types";
 
 const STEPS = [
   { id: 1, label: "모임 정보",  q: "어떤 모임인가요?" },
@@ -121,6 +124,21 @@ const TIME_RANGES = [
   { id: "custom",      label: "직접 설정", sub: "시작 ~ 종료 입력" },
 ];
 
+const KIND_TO_CAT: Record<string, MeetingCategory> = {
+  friend: "FRIEND", study: "STUDY", business: "BUSINESS",
+};
+const DURATION_H: Record<string, number> = {
+  "1시간": 1, "1.5시간": 2, "2시간": 2, "3시간": 3, "4시간+": 4,
+};
+const RANGE_TIME: Record<string, { s: string; e: string }> = {
+  "weekday-eve": { s: "18:00", e: "23:00" },
+  "weekday-day": { s: "09:00", e: "18:00" },
+  "weekend":     { s: "09:00", e: "22:00" },
+  "custom":      { s: "09:00", e: "23:00" },
+};
+function toYMD(d: Date) { return d.toLocaleDateString("sv"); }
+function toDeadlineISO(d: Date) { return `${toYMD(d)}T23:59:00+09:00`; }
+
 interface WizardData {
   name: string; desc: string; kind: string;
   from?: Date; to?: Date; due?: Date;
@@ -136,11 +154,46 @@ export default function WizardPage() {
     duration: "", range: "",
   });
   const [copied, setCopied] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [meetingId, setMeetingId] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!getToken()) router.replace("/login");
+  }, [router]);
 
   const set = (patch: Partial<WizardData>) => setData((d) => ({ ...d, ...patch }));
-  const next = () => setStep((s) => Math.min(s + 1, 5));
+
+  const handleNext = async () => {
+    if (step !== 3) { setStep((s) => Math.min(s + 1, 5)); return; }
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const tr = RANGE_TIME[data.range] ?? RANGE_TIME["weekday-eve"];
+      const res = await createMeeting({
+        title: data.name,
+        description: data.desc || null,
+        category: KIND_TO_CAT[data.kind],
+        startDate: toYMD(data.from!),
+        endDate: toYMD(data.to!),
+        availableStartTime: tr.s,
+        availableEndTime: tr.e,
+        durationHours: DURATION_H[data.duration] ?? 2,
+        responseDeadline: toDeadlineISO(data.due!),
+      });
+      setInviteUrl(res.inviteUrl);
+      setMeetingId(res.meetingId);
+      setStep(4);
+    } catch (e) {
+      setCreateError(e instanceof ApiError ? e.message : "모임 생성 중 오류가 생겼어요.");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const handleCopy = () => {
+    if (inviteUrl) navigator.clipboard.writeText(inviteUrl).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -190,7 +243,7 @@ export default function WizardPage() {
             </Section>
           </div>
           <div className="bottom-bar">
-            <Button block primary disabled={data.name.trim().length < 2 || !data.kind} onClick={next}>다음</Button>
+            <Button block primary disabled={data.name.trim().length < 2 || !data.kind} onClick={handleNext}>다음</Button>
           </div>
         </>
       )}
@@ -242,7 +295,7 @@ export default function WizardPage() {
             </div>
           </div>
           <div className="bottom-bar">
-            <Button block primary disabled={!data.from || !data.to || !data.due} onClick={next}>다음</Button>
+            <Button block primary disabled={!data.from || !data.to || !data.due} onClick={handleNext}>다음</Button>
 
           </div>
         </>
@@ -285,7 +338,10 @@ export default function WizardPage() {
             </Section>
           </div>
           <div className="bottom-bar">
-            <Button block primary disabled={!data.duration || !data.range} onClick={next}>다음</Button>
+            {createError && <p style={{ fontSize: 13, color: "var(--color-accent)", textAlign: "center", margin: 0 }}>{createError}</p>}
+          <Button block primary disabled={!data.duration || !data.range || creating} onClick={handleNext}>
+            {creating ? "생성 중…" : "다음"}
+          </Button>
           </div>
         </>
       )}
@@ -304,7 +360,7 @@ export default function WizardPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="t-cap">초대 링크</div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--color-primary)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
-                    woori-eonje.app/invite/abc-1234
+                    {inviteUrl ?? "링크를 불러오는 중…"}
                   </div>
                 </div>
                 <button onClick={handleCopy} className="btn outline" style={{ height: 36, padding: "0 12px", fontSize: 13, flex: "none" }}>
@@ -338,7 +394,7 @@ export default function WizardPage() {
             </div>
           </div>
           <div className="bottom-bar">
-            <Button block primary onClick={next}>응답 대기로 이동</Button>
+            <Button block primary onClick={handleNext}>응답 대기로 이동</Button>
           </div>
         </>
       )}
@@ -387,8 +443,8 @@ export default function WizardPage() {
             </Section>
           </div>
           <div className="bottom-bar">
-            <Button block primary onClick={() => router.push("/meetings/1/recommendations")}>
-              추천 결과 보기
+            <Button block primary onClick={() => router.push(`/meetings/${meetingId}/dashboard`)}>
+              대시보드로 이동
             </Button>
             <Button block variant="ghost" onClick={() => router.push("/meetings")}>
               내 모임 목록으로

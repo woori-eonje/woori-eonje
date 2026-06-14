@@ -4,6 +4,8 @@ import type { ApiResponse } from "@whenwe/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+const TOKEN_KEY = "whenwe:token";
+
 export class ApiError extends Error {
   constructor(
     public readonly code: string,
@@ -15,6 +17,21 @@ export class ApiError extends Error {
   }
 }
 
+// ── JWT 토큰 관리 ──────────────────────────────────────────────
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function saveToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+// ── 공통 fetch ──────────────────────────────────────────────────
 async function request<T>(path: string, init: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -33,6 +50,7 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   return body.data;
 }
 
+// ── 비인증 요청 ─────────────────────────────────────────────────
 export function apiGet<T>(path: string, headers?: Record<string, string>): Promise<T> {
   return request<T>(path, { headers });
 }
@@ -45,6 +63,33 @@ export function apiPost<T>(
   return request<T>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+// ── 인증(Bearer) 요청 ───────────────────────────────────────────
+function bearerHeader(): Record<string, string> {
+  const token = getToken();
+  if (!token) throw new ApiError("UNAUTHENTICATED", "로그인이 필요해요.", 401);
+  return { Authorization: `Bearer ${token}` };
+}
+
+export function authGet<T>(path: string): Promise<T> {
+  return request<T>(path, { headers: bearerHeader() });
+}
+
+export function authPost<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...bearerHeader() },
+    body: JSON.stringify(body),
+  });
+}
+
+export function authPatch<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...bearerHeader() },
     body: JSON.stringify(body),
   });
 }

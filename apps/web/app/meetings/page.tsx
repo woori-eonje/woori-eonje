@@ -1,19 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Logo } from "@/components/primitives";
 import { PlusCircle } from "@/components/icons";
 import { MeetingCard } from "@/components/meeting/MeetingCard";
 import type { Meeting } from "@/types/meeting";
+import { listMeetings } from "@/lib/meetings";
+import { ApiError, getToken } from "@/lib/api";
+import type { MeetingSummary } from "@whenwe/types";
 
 type TabKey = "active" | "confirm" | "confirmed" | "closed";
-
-const MEETINGS: Meeting[] = [
-  { id: "1", title: "6월 전시 모임", category: "friend", status: "COLLECTING",       dateRange: "6.1 — 6.14", deadline: "5.30", responseCount: 5, totalCount: 6 },
-  { id: "2", title: "7월 스터디 킥오프", category: "study", status: "READY_TO_CONFIRM", dateRange: "7.1 — 7.7",  deadline: "6.28", responseCount: 8, totalCount: 8 },
-  { id: "3", title: "팀 회의", category: "business", status: "CONFIRMED",      dateRange: "6.15", deadline: "확정됨",   responseCount: 4, totalCount: 4 },
-];
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: "active",    label: "진행 중" },
@@ -28,6 +26,30 @@ const FILTER: Record<TabKey, Meeting["status"][]> = {
   confirmed: ["CONFIRMED"],
   closed:    ["CLOSED"],
 };
+
+// MeetingSummary에는 category 없음 — MeetingCard가 category를 쓰지만 MeetingSummary에는 없어서 기본값 사용.
+// 상세 정보는 dashboard/page.tsx 에서 MeetingDetail로 가져옴.
+function toMeeting(s: MeetingSummary): Meeting {
+  const deadline = new Date(s.responseDeadline);
+  const deadlineLabel = `${deadline.getMonth() + 1}.${deadline.getDate()}`;
+  const startD = new Date(s.startDate);
+  const endD = new Date(s.endDate);
+  const dateRange = `${startD.getMonth() + 1}.${startD.getDate()} — ${endD.getMonth() + 1}.${endD.getDate()}`;
+
+  return {
+    id: String(s.meetingId),
+    title: s.title,
+    category: "friend",
+    status: s.status as unknown as Meeting["status"],
+    dateRange,
+    startDate: s.startDate,
+    endDate: s.endDate,
+    deadline: deadlineLabel,
+    responseDeadline: s.responseDeadline,
+    responseCount: 0,
+    totalCount: 0,
+  };
+}
 
 function EmptyMeetings({ tab }: { tab: TabKey }) {
   const messages: Record<TabKey, { title: string; sub: string }> = {
@@ -60,10 +82,34 @@ function EmptyMeetings({ tab }: { tab: TabKey }) {
   );
 }
 
-
 export default function MyMeetingsPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<TabKey>("active");
-  const filtered = MEETINGS.filter((m) => FILTER[tab].includes(m.status));
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!getToken()) {
+      router.replace("/login");
+      return;
+    }
+    setLoading(true);
+    listMeetings()
+      .then((list) => {
+        setMeetings(list.map(toMeeting));
+      })
+      .catch((e) => {
+        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
+          router.replace("/login");
+        } else {
+          setError(e instanceof ApiError ? e.message : "모임 목록을 불러올 수 없어요.");
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [router]);
+
+  const filtered = meetings.filter((m) => FILTER[tab].includes(m.status));
 
   return (
     <div className="screen">
@@ -95,10 +141,33 @@ export default function MyMeetingsPage() {
       </div>
 
       <div className="scroll" style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-        {filtered.length === 0
-          ? <EmptyMeetings tab={tab} />
-          : filtered.map((m) => <MeetingCard key={m.id} meeting={m} />)
-        }
+        {loading ? (
+          <>
+            <div className="skeleton" style={{ height: 120, borderRadius: 20 }} />
+            <div className="skeleton" style={{ height: 120, borderRadius: 20 }} />
+          </>
+        ) : error ? (
+          <div style={{ padding: "32px 20px", textAlign: "center" }}>
+            <p className="t-body2" style={{ marginBottom: 12 }}>{error}</p>
+            <button
+              className="btn outline"
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                listMeetings()
+                  .then((list) => setMeetings(list.map(toMeeting)))
+                  .catch((e) => setError(e instanceof ApiError ? e.message : "다시 시도해주세요."))
+                  .finally(() => setLoading(false));
+              }}
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : filtered.length === 0 ? (
+          <EmptyMeetings tab={tab} />
+        ) : (
+          filtered.map((m) => <MeetingCard key={m.id} meeting={m} />)
+        )}
       </div>
     </div>
   );
