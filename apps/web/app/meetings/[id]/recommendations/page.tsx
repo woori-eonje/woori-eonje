@@ -30,6 +30,7 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
   const { id } = use(params);
   const router = useRouter();
   const [recs, setRecs] = useState<Recommendation[]>([]);
+  const [selected, setSelected] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -43,14 +44,14 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
       .finally(() => setLoading(false));
   }, [id, router]);
 
-  const top = recs[0];
+  const pick = recs[selected] ?? recs[0];
 
   const handleConfirm = async () => {
-    if (!top) return;
+    if (!pick) return;
     setConfirming(true);
     setConfirmError(null);
     try {
-      await confirmMeeting(Number(id), top.recommendationId);
+      await confirmMeeting(Number(id), pick.recommendationId);
       router.push(`/meetings/${id}/confirmed`);
     } catch (e) {
       setConfirmError(e instanceof ApiError ? e.message : "확정 중 오류가 생겼어요.");
@@ -71,7 +72,7 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
     );
   }
 
-  if (error || !top) {
+  if (error || !pick) {
     return (
       <div className="screen">
         <TopBar title="추천 결과" onBack={() => router.back()} />
@@ -92,15 +93,16 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
 
       <div className="scroll" style={{ padding: "16px 20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-        {/* Hero */}
+        {/* Hero — 선택된 추천 */}
         <div>
-          <h2 className="t-h1" style={{ marginTop: 4 }}>가장 잘 맞는 시간을<br />찾았어요</h2>
+          <h2 className="t-h1" style={{ marginTop: 4 }}>
+            {selected === 0 ? <>가장 잘 맞는 시간을<br />찾았어요</> : `${pick.rank}순위 시간이에요`}
+          </h2>
           <p className="t-body2" style={{ marginTop: 6 }}>
-            1순위로 확정하거나, 다른 시간도 함께 확인해보세요.
+            아래 다른 시간을 눌러 비교하고 확정할 수 있어요.
           </p>
         </div>
 
-        {/* 1순위 card */}
         <div className="card emphasis" style={{ position: "relative", display: "flex", flexDirection: "column", gap: 14, marginTop: 4 }}>
           <span style={{
             position: "absolute", top: -12, left: 20,
@@ -108,17 +110,17 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
             fontSize: 12, fontWeight: 800, padding: "5px 12px",
             borderRadius: 999, letterSpacing: "-0.01em",
           }}>
-            1순위
+            {pick.rank}순위{pick.rank === 1 ? " · 가장 잘 맞는 시간" : ""}
           </span>
 
           <div>
-            <div className="t-cap" style={{ color: "var(--color-text-2)" }}>{formatDateLabel(top.startAt)}</div>
-            <h3 style={{ margin: "2px 0 0", fontSize: 22, fontWeight: 800, letterSpacing: "-0.035em" }}>{formatTimeRange(top.startAt, top.endAt)}</h3>
+            <div className="t-cap" style={{ color: "var(--color-text-2)" }}>{formatDateLabel(pick.startAt)}</div>
+            <h3 style={{ margin: "2px 0 0", fontSize: 22, fontWeight: 800, letterSpacing: "-0.035em" }}>{formatTimeRange(pick.startAt, pick.endAt)}</h3>
           </div>
 
-          <StatRow ok={top.availableCount} m={top.maybeCount} x={top.unavailableCount} emphasized />
+          <StatRow ok={pick.availableCount} m={pick.maybeCount} x={pick.unavailableCount} emphasized />
 
-          {top.requiredParticipantSatisfied && (
+          {pick.requiredParticipantSatisfied && (
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 6, alignSelf: "flex-start",
               background: "var(--color-primary-soft)", color: "var(--color-primary)",
@@ -143,31 +145,43 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
           </Button>
         </div>
 
-        {/* Other ranks */}
+        {/* 전체 순위 목록 */}
         {recs.length > 1 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <h3 className="t-h3" style={{ paddingLeft: 4 }}>다른 추천 시간</h3>
-            {recs.slice(1).map((r) => (
-              <div key={r.rank} style={{
-                background: "#fff", border: "1px solid var(--color-line)",
-                borderRadius: 16, padding: "14px 16px",
-                display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
-              }}>
+            {recs.map((r, i) => (
+              <button
+                key={r.rank}
+                onClick={() => setSelected(i)}
+                style={{
+                  width: "100%", textAlign: "left",
+                  background: selected === i ? "var(--color-primary-soft)" : "#fff",
+                  border: selected === i ? "1.5px solid var(--color-primary)" : "1px solid var(--color-line)",
+                  borderRadius: 16, padding: "14px 16px",
+                  display: "flex", alignItems: "center", gap: 12,
+                  fontFamily: "inherit", cursor: "pointer",
+                  transition: "background 120ms, border-color 120ms",
+                }}
+              >
                 <span style={{
-                  background: "var(--color-bg-2)", color: "var(--color-text-2)",
+                  background: selected === i ? "var(--color-primary)" : "var(--color-bg-2)",
+                  color: selected === i ? "#fff" : "var(--color-text-2)",
                   fontSize: 12, fontWeight: 800, padding: "5px 12px",
                   borderRadius: 999, letterSpacing: "-0.01em", flex: "none",
+                  transition: "background 120ms, color 120ms",
                 }}>
                   {r.rank}순위
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>{formatWhen(r.startAt, r.endAt)}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em", color: selected === i ? "var(--color-primary)" : "inherit" }}>
+                    {formatWhen(r.startAt, r.endAt)}
+                  </div>
                   <div style={{ marginTop: 2 }}>
                     <StatRow ok={r.availableCount} m={r.maybeCount} x={r.unavailableCount} />
                   </div>
                 </div>
-                <ChevronRight size={18} color="var(--color-text-muted)" />
-              </div>
+                <ChevronRight size={18} color={selected === i ? "var(--color-primary)" : "var(--color-text-muted)"} />
+              </button>
             ))}
           </div>
         )}
