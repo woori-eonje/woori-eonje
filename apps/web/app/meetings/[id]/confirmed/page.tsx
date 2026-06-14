@@ -19,10 +19,10 @@ export default function ConfirmedPage({ params }: { params: Promise<{ id: string
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (!getToken()) { router.replace("/login"); return; }
+    if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
     getMeeting(Number(id))
       .catch((e: unknown) => {
-        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace("/login");
+        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
       })
       .then((m) => { if (m) setMeeting(m); });
   }, [id, router]);

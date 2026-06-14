@@ -91,7 +91,7 @@ export default function MyMeetingsPage() {
 
   useEffect(() => {
     if (!getToken()) {
-      router.replace("/login");
+      router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
       return;
     }
     setLoading(true);
@@ -101,7 +101,7 @@ export default function MyMeetingsPage() {
       })
       .catch((e) => {
         if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
-          router.replace("/login");
+          router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
         } else {
           setError(e instanceof ApiError ? e.message : "모임 목록을 불러올 수 없어요.");
         }

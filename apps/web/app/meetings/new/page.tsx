@@ -116,7 +116,7 @@ function OptionCard({ icon, title, subtitle, active, onClick }: OptionCardProps)
 }
 
 /* ── Duration quick-select ── */
-const DURATIONS = ["1시간", "1.5시간", "2시간", "3시간", "4시간+"];
+const DURATIONS = ["1시간", "2시간", "3시간", "4시간", "5시간+"];
 const TIME_RANGES = [
   { id: "weekday-eve", label: "평일 저녁", sub: "18:00 – 23:00" },
   { id: "weekday-day", label: "평일 낮",   sub: "09:00 – 18:00" },
@@ -128,7 +128,7 @@ const KIND_TO_CAT: Record<string, MeetingCategory> = {
   friend: "FRIEND", study: "STUDY", business: "BUSINESS",
 };
 const DURATION_H: Record<string, number> = {
-  "1시간": 1, "1.5시간": 2, "2시간": 2, "3시간": 3, "4시간+": 4,
+  "1시간": 1, "2시간": 2, "3시간": 3, "4시간": 4, "5시간+": 5,
 };
 const RANGE_TIME: Record<string, { s: string; e: string }> = {
   "weekday-eve": { s: "18:00", e: "23:00" },
@@ -143,6 +143,7 @@ interface WizardData {
   name: string; desc: string; kind: string;
   from?: Date; to?: Date; due?: Date;
   duration: string; range: string;
+  customStart: string; customEnd: string;
 }
 
 export default function WizardPage() {
@@ -152,6 +153,7 @@ export default function WizardPage() {
     name: "", desc: "", kind: "",
     from: undefined, to: undefined, due: undefined,
     duration: "", range: "",
+    customStart: "09:00", customEnd: "22:00",
   });
   const [copied, setCopied] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -160,7 +162,7 @@ export default function WizardPage() {
   const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!getToken()) router.replace("/login");
+    if (!getToken()) router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
   }, [router]);
 
   const set = (patch: Partial<WizardData>) => setData((d) => ({ ...d, ...patch }));
@@ -170,7 +172,9 @@ export default function WizardPage() {
     setCreating(true);
     setCreateError(null);
     try {
-      const tr = RANGE_TIME[data.range] ?? RANGE_TIME["weekday-eve"];
+      const tr = data.range === "custom"
+        ? { s: data.customStart, e: data.customEnd }
+        : (RANGE_TIME[data.range] ?? RANGE_TIME["weekday-eve"]);
       const res = await createMeeting({
         title: data.name,
         description: data.desc || null,
@@ -334,14 +338,39 @@ export default function WizardPage() {
                     onClick={() => set({ range: t.id })}
                   />
                 ))}
+                {data.range === "custom" && (
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", paddingLeft: 4 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-2)" }}>시작</label>
+                      <input
+                        className="input"
+                        type="time"
+                        value={data.customStart}
+                        onChange={(e) => set({ customStart: e.target.value })}
+                        style={{ fontSize: 14 }}
+                      />
+                    </div>
+                    <span style={{ fontSize: 14, color: "var(--color-text-muted)", paddingTop: 20 }}>–</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: "var(--color-text-2)" }}>종료</label>
+                      <input
+                        className="input"
+                        type="time"
+                        value={data.customEnd}
+                        onChange={(e) => set({ customEnd: e.target.value })}
+                        style={{ fontSize: 14 }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </Section>
           </div>
           <div className="bottom-bar">
             {createError && <p style={{ fontSize: 13, color: "var(--color-accent)", textAlign: "center", margin: 0 }}>{createError}</p>}
-          <Button block primary disabled={!data.duration || !data.range || creating} onClick={handleNext}>
-            {creating ? "생성 중…" : "다음"}
-          </Button>
+            <Button block primary disabled={!data.duration || !data.range || creating} onClick={handleNext}>
+              {creating ? "생성 중…" : "다음"}
+            </Button>
           </div>
         </>
       )}

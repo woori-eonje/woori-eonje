@@ -69,6 +69,15 @@ type Tab = "aggregate" | "recommendations";
    앱 헤더
 ══════════════════════════════════════════════════════ */
 function AppHeader() {
+  const router = useRouter();
+  const [showMenu, setShowMenu] = useState(false);
+
+  const handleLogout = async () => {
+    const { logout } = await import("@/lib/auth");
+    await logout().catch(() => {});
+    router.push("/login");
+  };
+
   return (
     <header style={{
       height: 68,
@@ -84,26 +93,18 @@ function AppHeader() {
 
       {/* 내비게이션 */}
       <nav style={{ display: "flex", gap: 4, marginLeft: 24 }}>
-        {[
-          { label: "내 모임", active: true },
-          { label: "참여자", active: false },
-          { label: "설정",   active: false },
-        ].map(({ label, active }) => (
-          <a key={label} style={{
-            height: 36, padding: "0 16px",
-            display: "inline-flex", alignItems: "center",
-            color: active ? "var(--color-primary)" : "var(--color-text-2)",
-            textDecoration: "none",
-            fontSize: 14, fontWeight: 700, letterSpacing: "-0.015em",
-            whiteSpace: "nowrap" as const,
-            borderRadius: 999,
-            background: active ? "var(--color-primary-soft)" : "transparent",
-            cursor: "pointer",
-            transition: "background 160ms, color 160ms",
-          }}>
-            {label}
-          </a>
-        ))}
+        <Link href="/meetings" style={{
+          height: 36, padding: "0 16px",
+          display: "inline-flex", alignItems: "center",
+          color: "var(--color-primary)",
+          textDecoration: "none",
+          fontSize: 14, fontWeight: 700, letterSpacing: "-0.015em",
+          whiteSpace: "nowrap" as const,
+          borderRadius: 999,
+          background: "var(--color-primary-soft)",
+        }}>
+          내 모임
+        </Link>
       </nav>
 
       <span style={{ flex: 1 }} />
@@ -124,15 +125,41 @@ function AppHeader() {
         새 모임
       </Link>
 
-      {/* 아바타 */}
-      <span style={{
-        width: 36, height: 36, borderRadius: 999,
-        background: "var(--color-primary-soft)", color: "var(--color-primary)",
-        fontWeight: 800, fontSize: 14,
-        display: "inline-flex", alignItems: "center", justifyContent: "center",
-      }}>
-        소
-      </span>
+      {/* 아바타 + 로그아웃 메뉴 */}
+      <div style={{ position: "relative" }}>
+        <button
+          onClick={() => setShowMenu((v) => !v)}
+          style={{
+            width: 36, height: 36, borderRadius: 999,
+            background: "var(--color-primary-soft)", color: "var(--color-primary)",
+            fontWeight: 800, fontSize: 14, border: "none", cursor: "pointer",
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+          }}
+        >
+          내
+        </button>
+        {showMenu && (
+          <div style={{
+            position: "absolute", top: 44, right: 0,
+            background: "var(--color-surface)", border: "1px solid var(--color-line)",
+            borderRadius: 12, padding: 6, minWidth: 110,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.08)", zIndex: 100,
+          }}>
+            <button
+              onClick={handleLogout}
+              style={{
+                width: "100%", textAlign: "left",
+                background: "transparent", border: "none",
+                padding: "8px 12px", borderRadius: 8,
+                fontSize: 14, fontWeight: 600, color: "var(--color-text-2)",
+                cursor: "pointer", fontFamily: "inherit",
+              }}
+            >
+              로그아웃
+            </button>
+          </div>
+        )}
+      </div>
     </header>
   );
 }
@@ -596,12 +623,12 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
   const [recs, setRecs] = useState<ApiRec[]>([]);
 
   useEffect(() => {
-    if (!getToken()) { router.replace("/login"); return; }
+    if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
     const mid = Number(id);
     getMeeting(mid)
       .then(setMeeting)
       .catch((e: unknown) => {
-        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace("/login");
+        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
       });
     getRecommendations(mid)
       .then((res) => setRecs(res.recommendations))

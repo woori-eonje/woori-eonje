@@ -36,7 +36,7 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!getToken()) { router.replace("/login"); return; }
+    if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
     getRecommendations(Number(id))
       .then((res) => setRecs(res.recommendations))
       .catch((e) => setError(e instanceof ApiError ? e.message : "추천 결과를 불러올 수 없어요."))

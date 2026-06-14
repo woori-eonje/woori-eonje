@@ -1,14 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Logo } from "@/components/primitives";
 import { login, signup } from "@/lib/auth";
-import { ApiError } from "@/lib/api";
+import { ApiError, getToken } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect") ?? "/meetings";
+
+  useEffect(() => {
+    if (getToken()) router.replace(redirect);
+  }, [redirect, router]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
@@ -32,7 +38,7 @@ export default function LoginPage() {
       } else {
         await login(email, password);
       }
-      router.push("/meetings");
+      router.push(redirect);
     } catch (e) {
       if (e instanceof ApiError) {
         if (e.code === "EMAIL_ALREADY_EXISTS") {
@@ -90,6 +96,7 @@ export default function LoginPage() {
             <input
               className="input" type="email" placeholder="example@email.com"
               value={email} onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
           </div>
 
@@ -98,6 +105,7 @@ export default function LoginPage() {
             <input
               className="input" type="password" placeholder="8자 이상"
               value={password} onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
           </div>
 
