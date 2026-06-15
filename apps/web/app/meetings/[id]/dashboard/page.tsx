@@ -1,16 +1,15 @@
 "use client";
 
-import { use, useState, useMemo, useEffect } from "react";
+import { use, useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
 import { Logo, Button } from "@/components/primitives";
-import { ParticipantRow } from "@/components/meeting/ParticipantRow";
 import { Check, Clock, PlusCircle, Copy, Share } from "@/components/icons";
-import { getMeeting, getRecommendations, confirmMeeting } from "@/lib/meetings";
+import { getMeeting, getRecommendations, confirmMeeting, getAggregate } from "@/lib/meetings";
 import { ApiError, getToken } from "@/lib/api";
-import type { MeetingDetail, Recommendation as ApiRec } from "@whenwe/types";
+import type { MeetingDetail, Recommendation as ApiRec, SlotAggregate } from "@whenwe/types";
 
 const TZ = "Asia/Seoul";
 const CATEGORY_LABEL: Record<string, string> = {
@@ -25,35 +24,7 @@ function fmtDeadlineLeft(iso: string): string {
   return h < 24 ? `${h}시간 남음` : `${Math.floor(h / 24)}일 ${h % 24}시간 남음`;
 }
 
-/* ── 상수 ── */
-const DAYS = [
-  { id: "6.4",  label: "6.4",  weekday: "목" },
-  { id: "6.5",  label: "6.5",  weekday: "금" },
-  { id: "6.6",  label: "6.6",  weekday: "토" },
-  { id: "6.7",  label: "6.7",  weekday: "일" },
-  { id: "6.8",  label: "6.8",  weekday: "월" },
-  { id: "6.9",  label: "6.9",  weekday: "화" },
-  { id: "6.10", label: "6.10", weekday: "수" },
-];
-const HOURS = ["18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00"];
-const TOTAL = 6;
-
-
-/* ── 히트맵 데이터 ── */
-function buildAgg() {
-  const agg: Record<string, { ok: number; m: number }> = {};
-  for (const d of DAYS) for (const h of HOURS) agg[`${d.id}_${h}`] = { ok: 0, m: 0 };
-  const s = (d: string, h: string, ok: number, m: number) => { agg[`${d}_${h}`] = { ok, m }; };
-  s("6.4","19:00",3,1); s("6.4","19:30",4,1); s("6.4","20:00",4,0); s("6.4","20:30",3,1); s("6.4","21:00",2,1);
-  s("6.5","19:00",2,1); s("6.5","19:30",3,1); s("6.5","20:00",3,2); s("6.5","21:00",2,0);
-  s("6.6","18:30",4,1); s("6.6","19:00",5,1); s("6.6","19:30",5,1); s("6.6","20:00",5,0); s("6.6","20:30",4,1); s("6.6","21:00",3,1);
-  s("6.7","18:00",2,0); s("6.7","19:00",3,1); s("6.7","19:30",4,0); s("6.7","20:00",4,1); s("6.7","21:00",2,1);
-  s("6.8","20:00",4,1); s("6.8","20:30",4,0); s("6.8","21:00",3,1); s("6.8","21:30",2,1);
-  s("6.9","19:00",2,1); s("6.9","20:00",3,1); s("6.9","20:30",3,0);
-  s("6.10","19:30",3,0); s("6.10","20:00",4,1); s("6.10","20:30",3,1);
-  return agg;
-}
-
+/* ── 히트맵 셀 색 (가능 인원 수 기준) ── */
 function cellBg(ok: number) {
   if (ok >= 5) return { bg: "#1A9562",                color: "#fff" };
   if (ok === 4) return { bg: "rgba(26,149,98,0.45)",  color: "#fff" };
@@ -309,20 +280,86 @@ function PageTabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 /* ══════════════════════════════════════════════════════
    응답 현황 탭 — 히트맵
 ══════════════════════════════════════════════════════ */
-function AggregateTab() {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const agg = useMemo(() => buildAgg(), []);
-  const [picked, setPicked] = useState<string | null>("6.6_20:00");
+function AggregateTab({ slots, meeting, error, onRetry }: {
+  slots: SlotAggregate[] | null;
+  meeting: MeetingDetail | null;
+  error: boolean;
+  onRetry: () => void;
+}) {
+  // 슬롯(실데이터)에서 날짜·시간 격자와 셀 맵을 KST 기준으로 동적 생성.
+  // (hook 은 조건부 return 보다 위에 있어야 하므로 slots 가 null 이어도 안전하게 [] 로 처리)
+  const { days, hours, cellMap } = useMemo(() => {
+    const dayMap = new Map<string, { id: string; weekday: string; sort: number }>();
+    const hourSet = new Set<string>();
+    const cellMap = new Map<string, SlotAggregate>();
+    for (const s of slots ?? []) {
+      const dKey = formatInTimeZone(s.startAt, TZ, "M.d");
+      const hKey = formatInTimeZone(s.startAt, TZ, "HH:mm");
+      if (!dayMap.has(dKey)) {
+        dayMap.set(dKey, {
+          id: dKey,
+          weekday: formatInTimeZone(s.startAt, TZ, "EEE", { locale: ko }),
+          sort: new Date(s.startAt).getTime(),
+        });
+      }
+      hourSet.add(hKey);
+      cellMap.set(`${dKey}_${hKey}`, s);
+    }
+    return {
+      days: [...dayMap.values()].sort((a, b) => a.sort - b.sort),
+      hours: [...hourSet].sort(),
+      cellMap,
+    };
+  }, [slots]);
 
-  const pickedData = picked ? agg[picked] : null;
-  const [pickedDay, pickedHour] = picked ? picked.split("_") : ["", ""];
-  const pickedX = pickedData ? TOTAL - pickedData.ok - pickedData.m : 0;
+  // 기본 선택: 가능 인원이 가장 많은 슬롯.
+  const defaultKey = useMemo(() => {
+    let best: SlotAggregate | null = null;
+    for (const s of slots ?? []) if (!best || s.availableCount > best.availableCount) best = s;
+    return best
+      ? `${formatInTimeZone(best.startAt, TZ, "M.d")}_${formatInTimeZone(best.startAt, TZ, "HH:mm")}`
+      : null;
+  }, [slots]);
 
-  const PARTICIPANTS = [
-    { name: "소미", req: true }, { name: "지현", req: true },
-    { name: "민수", req: false }, { name: "유나", req: false },
-    { name: "태오", req: false }, { name: "하린", req: false },
-  ];
+  const [picked, setPicked] = useState<string | null>(null);
+  const activeKey = picked ?? defaultKey;
+  const pickedData = activeKey ? cellMap.get(activeKey) ?? null : null;
+  const [pickedDay, pickedHour] = activeKey ? activeKey.split("_") : ["", ""];
+  const pickedWeekday = days.find((d) => d.id === pickedDay)?.weekday ?? "";
+
+  const respondedCount = meeting?.respondedCount ?? 0;
+  const participantCount = meeting?.participantCount ?? 0;
+  const pct = participantCount > 0 ? Math.round((respondedCount / participantCount) * 100) : 0;
+
+  // 에러: 빈 상태로 위장하지 않고 명시 + 재시도.
+  if (error) {
+    return (
+      <div className="card" style={{ padding: 48, textAlign: "center" }}>
+        <p className="t-body2" style={{ marginBottom: 14 }}>응답 현황을 불러오지 못했어요.</p>
+        <Button onClick={onRetry}>다시 시도</Button>
+      </div>
+    );
+  }
+  // 로딩(아직 fetch 전): 스켈레톤 격자 — 빈 상태와 구분.
+  if (slots === null) {
+    return (
+      <div className="card" style={{ padding: 28 }}>
+        <span className="skeleton" style={{ display: "block", width: 280, height: 22, borderRadius: 8, marginBottom: 22 }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <span key={i} className="skeleton" style={{ display: "block", height: 42, borderRadius: 8 }} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (slots.length === 0) {
+    return (
+      <div className="card" style={{ padding: 48, textAlign: "center" }}>
+        <p className="t-body2">아직 응답할 수 있는 슬롯이 없어요.</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 340px", gap: 24, alignItems: "start" }}>
@@ -331,7 +368,7 @@ function AggregateTab() {
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap" as const, gap: 12 }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1.3 }}>언제 가장 많이 모일 수 있을까요?</h2>
-            <p className="t-body2" style={{ marginTop: 6 }}>색이 진할수록 더 많은 사람이 가능해요. 셀을 누르면 누가 가능한지 보여드릴게요.</p>
+            <p className="t-body2" style={{ marginTop: 6 }}>색이 진할수록 더 많은 사람이 가능해요. 셀을 누르면 상세를 보여드릴게요.</p>
           </div>
           {/* 범례 */}
           <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 12, color: "var(--color-text-2)", flexWrap: "wrap" as const }}>
@@ -362,42 +399,47 @@ function AggregateTab() {
             <thead>
               <tr>
                 <th style={{ width: 52 }} />
-                {DAYS.map((d) => (
+                {days.map((d) => (
                   <th key={d.id} style={{ fontSize: 11, fontWeight: 700, color: "var(--color-text-2)", padding: "4px 0", textAlign: "center" }}>
                     <div style={{ fontSize: 10, fontWeight: 600, color: "var(--color-text-muted)" }}>{d.weekday}</div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "var(--color-text)", marginTop: 2 }}>{d.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: "var(--color-text)", marginTop: 2 }}>{d.id}</div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {HOURS.map((h) => (
+              {hours.map((h) => (
                 <tr key={h}>
                   <td style={{ fontSize: 11, color: "var(--color-text-2)", textAlign: "right", paddingRight: 8, verticalAlign: "middle", whiteSpace: "nowrap" as const }}>{h}</td>
-                  {DAYS.map((d) => {
+                  {days.map((d) => {
                     const key = `${d.id}_${h}`;
-                    const data = agg[key];
-                    const isPicked = picked === key;
-                    const { bg, color } = cellBg(data.ok);
+                    const data = cellMap.get(key);
+                    const ok = data?.availableCount ?? 0;
+                    const maybe = data?.maybeCount ?? 0;
+                    const isPicked = activeKey === key;
+                    const { bg, color } = cellBg(ok);
                     return (
                       <td key={key} style={{ padding: 0 }}>
                         <button
                           type="button"
-                          onClick={() => setPicked(key)}
-                          aria-label={`${d.weekday} ${d.label} ${h} 가능 ${data.ok}명`}
+                          onClick={() => data && setPicked(key)}
+                          disabled={!data}
+                          aria-label={`${d.weekday} ${d.id} ${h} 가능 ${ok}명`}
                           style={{
                             width: "100%", height: 42,
-                            border: data.m > 0 ? "1px dashed var(--color-maybe)" : `1px solid ${data.ok > 0 ? "transparent" : "var(--color-line)"}`,
-                            padding: 0, cursor: "pointer",
+                            border: maybe > 0 ? "1px dashed var(--color-maybe)" : `1px solid ${data ? (ok > 0 ? "transparent" : "var(--color-line)") : "var(--color-line)"}`,
+                            padding: 0, cursor: data ? "pointer" : "default",
                             borderRadius: 8,
                             fontSize: 13, fontWeight: 700,
-                            background: bg, color,
+                            background: data ? bg : "var(--color-bg-2)",
+                            color,
+                            opacity: data ? 1 : 0.4,
                             outline: isPicked ? "2px solid var(--color-primary)" : "none",
                             outlineOffset: 1,
                             transition: "outline 80ms, box-shadow 120ms",
                           }}
                         >
-                          {data.ok > 0 ? data.ok : ""}
+                          {ok > 0 ? ok : ""}
                         </button>
                       </td>
                     );
@@ -413,33 +455,24 @@ function AggregateTab() {
       <aside style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         <div className="card tight" style={{ padding: 22 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 10 }}>선택한 시간</div>
-          {picked && pickedData ? (
+          {pickedData ? (
             <>
               <h3 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, letterSpacing: "-0.025em" }}>
-                {pickedDay} ({DAYS.find((d) => d.id === pickedDay)?.weekday}) {pickedHour}
+                {pickedDay} ({pickedWeekday}) {pickedHour}
               </h3>
-              <div style={{ display: "flex", gap: 12, alignItems: "baseline", marginBottom: 14, flexWrap: "wrap" as const }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" as const }}>
                 <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}>
-                  <b style={{ fontSize: 22, fontWeight: 900, color: "var(--color-primary)", letterSpacing: "-0.02em" }}>{pickedData.ok}</b>
+                  <b style={{ fontSize: 22, fontWeight: 900, color: "var(--color-primary)", letterSpacing: "-0.02em" }}>{pickedData.availableCount}</b>
                   <span style={{ fontSize: 12, color: "var(--color-primary)" }}>가능</span>
                 </span>
                 <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}>
-                  <b style={{ fontSize: 18, fontWeight: 800, color: "var(--color-maybe-text)" }}>{pickedData.m}</b>
+                  <b style={{ fontSize: 18, fontWeight: 800, color: "var(--color-maybe-text)" }}>{pickedData.maybeCount}</b>
                   <span style={{ fontSize: 12, color: "var(--color-maybe-text)" }}>애매</span>
                 </span>
                 <span style={{ display: "inline-flex", alignItems: "baseline", gap: 4 }}>
-                  <b style={{ fontSize: 18, fontWeight: 800, color: "var(--color-text-muted)" }}>{pickedX}</b>
-                  <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>응답 대기</span>
+                  <b style={{ fontSize: 18, fontWeight: 800, color: "var(--color-text-muted)" }}>{pickedData.unavailableCount}</b>
+                  <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>불가</span>
                 </span>
-              </div>
-              <div className="divider" />
-              <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", margin: "14px 0 8px" }}>참여자별 상태</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {PARTICIPANTS.map((p, i) => {
-                  const idx = (pickedDay.charCodeAt(0) + (pickedHour?.charCodeAt(0) ?? 0) + i) % 5;
-                  const status = idx < 3 ? "available" : idx === 3 ? "maybe" : "unavail";
-                  return <ParticipantRow key={p.name} name={p.name} status={status as "available"|"maybe"|"unavail"} required={p.req} />;
-                })}
               </div>
             </>
           ) : (
@@ -451,13 +484,17 @@ function AggregateTab() {
           <span style={{ position: "absolute", top: -20, right: -16, width: 70, height: 70, borderRadius: 999, background: "var(--color-baby-blue)", opacity: 0.55 }} aria-hidden="true" />
           <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 8 }}>응답 현황</div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 8 }}>
-            <span style={{ fontSize: 28, fontWeight: 900, color: "var(--color-primary)", letterSpacing: "-0.03em" }}>5</span>
-            <span className="t-body2">/ 6명</span>
+            <span style={{ fontSize: 28, fontWeight: 900, color: "var(--color-primary)", letterSpacing: "-0.03em" }}>{respondedCount}</span>
+            <span className="t-body2">/ {participantCount}명</span>
           </div>
           <div style={{ height: 8, background: "var(--color-bg-2)", borderRadius: 999, overflow: "hidden" }}>
-            <div style={{ width: "83%", height: "100%", background: "var(--color-primary)", borderRadius: 999 }} />
+            <div style={{ width: `${pct}%`, height: "100%", background: "var(--color-primary)", borderRadius: 999 }} />
           </div>
-          <p className="t-cap" style={{ marginTop: 10 }}>마감 5.30 (금) 23:59 · 남은 시간 2일 6시간</p>
+          {meeting && (
+            <p className="t-cap" style={{ marginTop: 10 }}>
+              마감 {fmtDateLabel(meeting.responseDeadline)} · {fmtDeadlineLeft(meeting.responseDeadline)}
+            </p>
+          )}
         </div>
       </aside>
     </div>
@@ -618,13 +655,24 @@ function RecommendationsTab({ recs, meetingId, onConfirmed }: {
 export default function DashboardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const mid = Number(id);
   const [tab, setTab] = useState<Tab>("aggregate");
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
   const [recs, setRecs] = useState<ApiRec[]>([]);
+  // null = 아직 로딩 중(빈 배열 = 슬롯 없음과 구분). aggError = fetch 실패.
+  const [agg, setAgg] = useState<SlotAggregate[] | null>(null);
+  const [aggError, setAggError] = useState(false);
+
+  const loadAggregate = useCallback(() => {
+    setAggError(false);
+    setAgg(null);
+    getAggregate(mid)
+      .then((res) => setAgg(res.slots))
+      .catch(() => setAggError(true));
+  }, [mid]);
 
   useEffect(() => {
     if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
-    const mid = Number(id);
     getMeeting(mid)
       .then(setMeeting)
       .catch((e: unknown) => {
@@ -633,7 +681,8 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
     getRecommendations(mid)
       .then((res) => setRecs(res.recommendations))
       .catch(() => {});
-  }, [id, router]);
+    loadAggregate();
+  }, [mid, router, loadAggregate]);
 
   return (
     <div style={{ minHeight: "100dvh", background: "var(--color-bg)" }}>
@@ -651,8 +700,8 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
         <PageTabs tab={tab} setTab={setTab} />
 
         {tab === "aggregate"
-          ? <AggregateTab />
-          : <RecommendationsTab recs={recs} meetingId={Number(id)} onConfirmed={() => setRecs([])} />}
+          ? <AggregateTab slots={agg} meeting={meeting} error={aggError} onRetry={loadAggregate} />
+          : <RecommendationsTab recs={recs} meetingId={mid} onConfirmed={() => setRecs([])} />}
       </main>
     </div>
   );

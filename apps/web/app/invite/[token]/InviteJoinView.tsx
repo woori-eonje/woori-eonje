@@ -34,6 +34,13 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
     setError(null);
     try {
       const res = await registerParticipant(token, name.trim());
+      // 비회원(GUEST) 등록은 항상 edit token 을 발급한다. null 은 회원(MEMBER, Bearer)
+      // 경로인데 현재 화면은 비회원만 등록하므로 도달하지 않는다(#4 FE 연동 시 JWT 사용).
+      if (res.participantEditToken == null) {
+        setError("로그인 참여는 아직 준비 중이에요. 닉네임으로 참여해 주세요.");
+        setSubmitting(false);
+        return;
+      }
       saveParticipant(token, {
         participantId: res.participantId,
         editToken: res.participantEditToken,

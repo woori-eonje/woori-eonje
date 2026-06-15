@@ -6,6 +6,7 @@ import type {
   CreateMeetingRequest,
   RecommendationsResponse,
   ConfirmResult,
+  AggregateResponse,
 } from "@whenwe/types";
 import { authGet, authPost } from "./api";
 
@@ -23,6 +24,10 @@ export function getMeeting(meetingId: number): Promise<MeetingDetail> {
 
 export function getRecommendations(meetingId: number): Promise<RecommendationsResponse> {
   return authGet<RecommendationsResponse>(`/api/meetings/${meetingId}/recommendations`);
+}
+
+export function getAggregate(meetingId: number): Promise<AggregateResponse> {
+  return authGet<AggregateResponse>(`/api/meetings/${meetingId}/aggregate`);
 }
 
 export function confirmMeeting(meetingId: number, recommendationId: number): Promise<ConfirmResult> {
