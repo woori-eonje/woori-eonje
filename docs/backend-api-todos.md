@@ -13,7 +13,8 @@
 - ✅ **#2** `GET /api/meetings/{id}/participants` — 커밋 `c6912ad`
 - ✅ 데모 시드 2027 미래화(데모 복구) — 커밋 `8e142a7`
 - ✅ **#3** `GET /api/meetings/{id}/aggregate`(응답현황 히트맵) — owner 가드 + 슬롯별 groupBy 집계
-- ⬜ #9 → ⬜ #8 → ⬜ #6
+- ✅ **#9** `DELETE /api/meetings/{id}`(모임 삭제) — owner 가드 + cascade, 200 Empty, P2025→404
+- ⬜ #8 → ⬜ #6
 - 🟡 보류(도메인 결정 먼저): #7 · #4 · #5
 
 ---
@@ -41,7 +42,7 @@
 - **백엔드**: 슬롯별 가능/애매/불가 카운트. **추천 엔진이 내부에서 하는 per-slot 집계와 동일** — 그 로직 일부를 노출/재사용 가능. owner 가드.
 - **계약**: 신규 path + `SlotAggregate[]`.
 
-### #9 🟢 `DELETE /api/meetings/{id}` 신규
+### #9 ✅🟢 `DELETE /api/meetings/{id}` 신규
 - **무엇**: 모임 삭제(모임장, 언제든).
 - **백엔드**: owner 가드 → `meeting.delete`. **스키마가 이미 `onDelete: Cascade`**(participants·slots·availability·recommendations·state_logs) → 연쇄 삭제 자동.
 - **계약**: 신규 path. 204 or 200 Empty.

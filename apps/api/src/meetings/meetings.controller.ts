@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -72,6 +73,17 @@ export class MeetingsController {
     @Param('meetingId', ParseIntPipe) meetingId: number,
   ): Promise<ParticipantsResponse> {
     return this.meetingsService.listParticipants(meetingId, req.user.id);
+  }
+
+  // DELETE /api/meetings/:meetingId — 모임 삭제 (JWT + 모임장 소유). 봉투 200 + Empty.
+  @Delete(':meetingId')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  deleteMeeting(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+  ): Promise<Record<string, never>> {
+    return this.meetingsService.deleteMeeting(meetingId, req.user.id);
   }
 
   // GET /api/meetings/:meetingId/aggregate — 응답 현황 히트맵 (JWT + 모임장 소유)

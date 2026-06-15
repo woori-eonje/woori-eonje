@@ -234,6 +234,42 @@ export class MeetingsService {
     };
   }
 
+  // DELETE /api/meetings/:meetingId — JWT + 모임장 소유. 상태 무관 언제든 삭제.
+  // 참여자·슬롯·가능시간·추천결과·상태로그는 스키마 onDelete Cascade 로 연쇄 삭제된다.
+  async deleteMeeting(
+    meetingId: number,
+    userId: number,
+  ): Promise<Record<string, never>> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    // findUnique 와 delete 사이에 다른 요청이 먼저 삭제하면 Prisma 가 P2025(행 없음)를
+    // 던진다 — 계약 외 500 대신 404 로 변환(경합 idempotent 처리). auth 의 P2002 판별과 동일 방식.
+    try {
+      await this.prisma.meeting.delete({ where: { id: meetingId } });
+    } catch (e) {
+      if (this.isRecordNotFound(e)) {
+        throw meetingNotFound();
+      }
+      throw e;
+    }
+
+    return {};
+  }
+
+  // Prisma 레코드 부재(P2025) 판별 — auth.service 의 isUniqueViolation 과 같은 duck-typing.
+  private isRecordNotFound(e: unknown): boolean {
+    return (
+      typeof e === 'object' &&
+      e !== null &&
+      'code' in e &&
+      (e as { code?: unknown }).code === 'P2025'
+    );
+  }
+
   // GET /api/meetings/:meetingId/aggregate — JWT + 모임장 소유. 응답 현황 히트맵용.
   // 슬롯별 가능/애매/불가 카운트. 추천 엔진의 window 단위 집계와 달리 개별 1시간 슬롯
   // 단위라 엔진 로직을 재사용하지 않고 (slotId, status) groupBy 로 직접 집계한다.

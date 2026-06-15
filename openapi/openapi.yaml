@@ -190,6 +190,30 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+    delete:
+      tags: [Meetings]
+      operationId: deleteMeeting
+      summary: 모임 삭제 (모임장)
+      description: |
+        모임장이 언제든(상태 무관) 모임을 삭제한다. 참여자·슬롯·가능시간·추천결과·
+        상태로그는 스키마의 onDelete Cascade 로 함께 삭제된다.
+      responses:
+        '200':
+          description: 삭제 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Empty' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
 
   /api/meetings/{meetingId}/participants:
     parameters:
