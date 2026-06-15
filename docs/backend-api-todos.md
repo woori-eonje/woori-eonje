@@ -80,7 +80,9 @@
   - **(b)** 슬롯을 N시간 겹침 블록으로 전면 변경 → 저장/집계/엔진 전부 재설계. 큼.
 - **참고**: 추천엔진 만들 때 사용자(나)가 "묶어서 하나의 선택지로 보는 게 맞다"고 했던 방향과 (a)가 부합. **이 결정부터 하고 진행.**
 
-### #4 🔴 Bearer 있으면 participant를 `MEMBER`로 생성 (계정 연동)
+### #4 ✅🔴 Bearer 있으면 participant를 `MEMBER`로 생성 (계정 연동)
+> 결정·구현: Bearer 있으면 MEMBER+userId(없으면 GUEST 하위호환). 중복참여=`(userId,meetingId)` unique + 멱등 반환(P2002 경합 복구). 회원 인증=availability 가 JWT 우선, 없으면 edit_token. 로그인 사용자의 게스트 참여는 FE 가 토큰 미전송으로 선택.
+
 - **무엇**: 로그인 사용자가 초대 참여 시 GUEST가 아니라 계정 연동된 MEMBER로.
 - **백엔드**: `POST participants` 가 Authorization 있으면 토큰 검증 → `userId` 채우고 `participantType=MEMBER`. 없으면 기존 GUEST(하위호환).
 - **도메인 영향**: 현재 "식별 = participant_id + edit_token, 동일 닉네임 허용" 규칙에 **"같은 user가 같은 모임 중복 참여 방지"**(userId+meetingId unique?) 추가 필요. edit_token vs userId 식별 이원화.

@@ -223,8 +223,11 @@ export interface RegisterParticipantRequest {
 export interface ParticipantRegistered {
   participantId: number;
   guestName: string;
-  /** 비회원 응답 수정용 토큰 — 클라이언트(localStorage)에 저장 */
-  participantEditToken: string;
+  /**
+   * 비회원(GUEST) 응답 수정용 토큰 — 클라이언트(localStorage)에 저장.
+   * 회원(MEMBER, Bearer 로 참여)은 JWT 로 본인 응답을 식별하므로 null.
+   */
+  participantEditToken: string | null;
 }
 
 // ── API DTO: 참여자 (PATCH /api/meetings/{meetingId}/participants/{participantId})

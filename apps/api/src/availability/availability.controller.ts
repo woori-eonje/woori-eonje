@@ -28,27 +28,36 @@ export class AvailabilityController {
     return this.availabilityService.listSlots(meetingId);
   }
 
-  // POST /api/meetings/:meetingId/availability — 가능 시간 제출/수정 (X-Participant-Edit-Token)
+  // POST /api/meetings/:meetingId/availability — 가능 시간 제출/수정.
+  // 회원은 Authorization Bearer(JWT), 비회원은 X-Participant-Edit-Token.
   @Post('availability')
   @HttpCode(200)
   submitAvailability(
     @Param('meetingId', ParseIntPipe) meetingId: number,
     @Headers('x-participant-edit-token') editToken: string | undefined,
+    @Headers('authorization') authHeader: string | undefined,
     @Body() body: SubmitAvailabilityRequest,
   ): Promise<SubmitAvailabilityResponse> {
     return this.availabilityService.submitAvailability(
       meetingId,
       editToken,
+      authHeader,
       body,
     );
   }
 
-  // GET /api/meetings/:meetingId/availability/me — 내 응답 조회 (X-Participant-Edit-Token)
+  // GET /api/meetings/:meetingId/availability/me — 내 응답 조회.
+  // 회원은 Authorization Bearer(JWT), 비회원은 X-Participant-Edit-Token.
   @Get('availability/me')
   getMyAvailability(
     @Param('meetingId', ParseIntPipe) meetingId: number,
     @Headers('x-participant-edit-token') editToken: string | undefined,
+    @Headers('authorization') authHeader: string | undefined,
   ): Promise<MyAvailability> {
-    return this.availabilityService.getMyAvailability(meetingId, editToken);
+    return this.availabilityService.getMyAvailability(
+      meetingId,
+      editToken,
+      authHeader,
+    );
   }
 }

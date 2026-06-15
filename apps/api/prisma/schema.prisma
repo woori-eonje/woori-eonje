@@ -99,6 +99,9 @@ model Participant {
   user           User?                     @relation(fields: [userId], references: [id])
   availabilities ParticipantAvailability[]
 
+  // 회원(userId 존재)은 한 모임에 한 번만 — 비회원(userId null)은 Postgres 가 NULL 을
+  // 유니크로 묶지 않아 기존처럼 중복 참여(동일 닉네임 포함)가 허용된다.
+  @@unique([userId, meetingId])
   @@index([meetingId])
   @@map("participants")
 }

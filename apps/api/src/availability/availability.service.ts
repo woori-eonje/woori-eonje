@@ -7,16 +7,19 @@ import {
   type SubmitAvailabilityRequest,
   type SubmitAvailabilityResponse,
 } from '@whenwe/types';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { DomainException } from '../common/domain-exception';
 import { RecommendationsService } from '../recommendations/recommendations.service';
 import { buildWindows } from '../meetings/slot-generation';
+import { resolveOptionalUserId } from '../auth/optional-bearer';
 
 @Injectable()
 export class AvailabilityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly recommendations: RecommendationsService,
+    private readonly jwtService: JwtService,
   ) {}
 
   // GET /api/meetings/:meetingId/slots — 인증 불필요
@@ -52,11 +55,13 @@ export class AvailabilityService {
   async submitAvailability(
     meetingId: number,
     editToken: string | undefined,
+    authHeader: string | undefined,
     body: SubmitAvailabilityRequest,
   ): Promise<SubmitAvailabilityResponse> {
     const participant = await this.authenticateParticipant(
       meetingId,
       editToken,
+      authHeader,
     );
 
     // body.participantId 는 토큰의 participant 와 일치해야 한다.
@@ -146,10 +151,12 @@ export class AvailabilityService {
   async getMyAvailability(
     meetingId: number,
     editToken: string | undefined,
+    authHeader: string | undefined,
   ): Promise<MyAvailability> {
     const participant = await this.authenticateParticipant(
       meetingId,
       editToken,
+      authHeader,
     );
 
     const availabilities = await this.prisma.participantAvailability.findMany({
@@ -167,11 +174,27 @@ export class AvailabilityService {
     };
   }
 
-  // 토큰으로 participant 를 조회하고, 경로 meetingId 와 일치하는지 확인한다.
+  // 참여자 인증: 회원은 Bearer(JWT)→userId, 비회원은 X-Participant-Edit-Token.
+  // Bearer 가 있으면 그 경로를 우선하고, 없으면 edit_token 으로 식별한다.
   private async authenticateParticipant(
     meetingId: number,
     editToken: string | undefined,
+    authHeader: string | undefined,
   ) {
+    // 회원 경로: Bearer 가 유효하면 (userId, meetingId) 로 참여자 조회.
+    const userId = await resolveOptionalUserId(this.jwtService, authHeader);
+    if (userId !== null) {
+      const member = await this.prisma.participant.findUnique({
+        where: { userId_meetingId: { userId, meetingId } },
+      });
+      // 로그인했으나 이 모임의 참여자가 아니면 401(먼저 참여 등록 필요).
+      if (!member) {
+        throw this.tokenInvalid();
+      }
+      return member;
+    }
+
+    // 비회원 경로: edit_token.
     const token = editToken?.trim();
     if (!token) {
       throw this.tokenInvalid();
