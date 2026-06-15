@@ -16,7 +16,10 @@
 - ✅ **#9** `DELETE /api/meetings/{id}`(모임 삭제) — owner 가드 + cascade, 200 Empty, P2025→404
 - ✅ **#8** `PATCH /api/meetings/{id}`(모임 수정) — COLLECTING+응답자0명만, 슬롯 재생성, RESPONSE_ALREADY_EXISTS·MEETING_NOT_EDITABLE(409)
 - ✅ **#6** `POST /api/meetings` `dates[]`(특정 날짜) — generateSlots 일반화(expandDateRange), 범위 부분집합 검증. update도 자동 지원
-- ⬜ 1차 백로그 완료. 다음은 도메인 결정(#7·#4·#5)
+- ✅ **#7** GET slots `windows`(소요시간 블록, 엔진보존형) — buildWindows
+- ✅ **#4** 로그인 초대 참여 시 MEMBER 연동 — (userId,meetingId) unique·멱등, JWT/edit_token 이원 인증
+- ✅ **#5** 내 모임 목록에 참여한 모임 + role(ORGANIZER|PARTICIPANT)
+- 🎉 **FE 요청 9건 전부 완료** (#1~#9)
 - 🟡 보류(도메인 결정 먼저): #7 · #4 · #5
 
 ---
