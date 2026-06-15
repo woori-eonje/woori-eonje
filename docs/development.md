@@ -38,8 +38,11 @@ pnpm --filter api test:e2e            # e2e 테스트
 
 ## 협업 규칙
 
-- 브랜치: `main`(배포) / `develop`(통합) / `feature/*` / `fix/*`. **1인 개발이면 `main` + `feature/*` 로 단순화 가능.**
-- 기능 단위 PR, API 변경 시 FE/BE 양쪽 확인.
+- 브랜치 전략(프론트/백 협업 기준 — 상세는 `apps/web/AGENTS.md`):
+  - `main`(배포) / `develop-fetch`(통합 — 프론트+백엔드 병합 기준점)
+  - `develop-front`(프론트 작업) · `develop-backend`(백엔드 작업)
+  - 백엔드는 `develop-fetch`에서 분기해 작업 후 `develop-fetch`로 병합. 프론트 변경은 `develop-fetch` pull로 수신.
+- 기능 단위 PR, API 변경 시 FE/BE 양쪽 확인. **계약(`openapi/openapi.yaml`)·공유 타입(`packages/types`) 변경 시 커밋 메시지에 명시**(상호 통보).
 - 기술 의사결정은 `docs/decisions/`에 ADR로 기록(기획서 26장: 추천 전략, 토큰 정책, 상태 정책, 캘린더 내보내기 등).
 
 ## 개발 규칙
