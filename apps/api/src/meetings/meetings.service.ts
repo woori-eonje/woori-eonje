@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import {
+  type AggregateResponse,
+  AvailabilityStatus,
   type ConfirmResult,
   type CreateMeetingRequest,
   ErrorCode,
@@ -229,6 +231,69 @@ export class MeetingsService {
         isRequired: p.isRequired,
         hasResponded: respondedSet.has(p.id),
       })),
+    };
+  }
+
+  // GET /api/meetings/:meetingId/aggregate — JWT + 모임장 소유. 응답 현황 히트맵용.
+  // 슬롯별 가능/애매/불가 카운트. 추천 엔진의 window 단위 집계와 달리 개별 1시간 슬롯
+  // 단위라 엔진 로직을 재사용하지 않고 (slotId, status) groupBy 로 직접 집계한다.
+  async getAggregate(
+    meetingId: number,
+    userId: number,
+  ): Promise<AggregateResponse> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    const [slots, grouped] = await Promise.all([
+      this.prisma.availabilitySlot.findMany({
+        where: { meetingId },
+        orderBy: { slotStartAt: 'asc' },
+        select: { id: true, slotStartAt: true },
+      }),
+      this.prisma.participantAvailability.groupBy({
+        by: ['slotId', 'availabilityStatus'],
+        where: { meetingId },
+        _count: { _all: true },
+      }),
+    ]);
+
+    // (slotId -> 상태별 카운트) 누적. 응답 없는 슬롯은 아래 map 에서 0 으로 채워진다.
+    const countsBySlot = new Map<
+      number,
+      { available: number; maybe: number; unavailable: number }
+    >();
+    for (const g of grouped) {
+      const entry = countsBySlot.get(g.slotId) ?? {
+        available: 0,
+        maybe: 0,
+        unavailable: 0,
+      };
+      const count = g._count._all;
+      if (g.availabilityStatus === AvailabilityStatus.AVAILABLE) {
+        entry.available = count;
+      } else if (g.availabilityStatus === AvailabilityStatus.MAYBE) {
+        entry.maybe = count;
+      } else {
+        entry.unavailable = count;
+      }
+      countsBySlot.set(g.slotId, entry);
+    }
+
+    return {
+      meetingId,
+      slots: slots.map((s) => {
+        const c = countsBySlot.get(s.id);
+        return {
+          slotId: s.id,
+          startAt: s.slotStartAt.toISOString(),
+          availableCount: c?.available ?? 0,
+          maybeCount: c?.maybe ?? 0,
+          unavailableCount: c?.unavailable ?? 0,
+        };
+      }),
     };
   }
 

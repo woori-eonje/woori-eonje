@@ -12,7 +12,8 @@
 - ✅ **#3.5** `InvitePublic` + `confirmedStartAt`·`confirmedEndAt` — 커밋 `235ff78`
 - ✅ **#2** `GET /api/meetings/{id}/participants` — 커밋 `c6912ad`
 - ✅ 데모 시드 2027 미래화(데모 복구) — 커밋 `8e142a7`
-- ⬜ **#3**(히트맵, 다음) → ⬜ #9 → ⬜ #8 → ⬜ #6
+- ✅ **#3** `GET /api/meetings/{id}/aggregate`(응답현황 히트맵) — owner 가드 + 슬롯별 groupBy 집계
+- ⬜ #9 → ⬜ #8 → ⬜ #6
 - 🟡 보류(도메인 결정 먼저): #7 · #4 · #5
 
 ---
@@ -35,7 +36,7 @@
 - **백엔드**: 신규 엔드포인트(owner 가드). `{ participantId, guestName, participantType, isRequired, hasResponded }[]`. hasResponded = availability 행 존재.
 - **계약**: 신규 path + `ParticipantWithStatus`(또는 기존 `Participant`+hasResponded) 타입.
 
-### #3 🟡 `GET /api/meetings/{id}/aggregate` 신규 (히트맵)
+### #3 ✅🟡 `GET /api/meetings/{id}/aggregate` 신규 (히트맵)
 - **무엇**: 대시보드 "응답 현황" 히트맵 실데이터.
 - **백엔드**: 슬롯별 가능/애매/불가 카운트. **추천 엔진이 내부에서 하는 per-slot 집계와 동일** — 그 로직 일부를 노출/재사용 가능. owner 가드.
 - **계약**: 신규 path + `SlotAggregate[]`.

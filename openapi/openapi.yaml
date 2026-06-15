@@ -221,6 +221,41 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /api/meetings/{meetingId}/aggregate:
+    parameters:
+      - $ref: '#/components/parameters/MeetingId'
+    get:
+      tags: [Meetings]
+      operationId: getAggregate
+      summary: 응답 현황 히트맵 집계 (모임장)
+      description: |
+        슬롯별 가능/애매/불가 응답 수를 집계해 반환한다(대시보드 히트맵).
+        추천 엔진의 window 단위 집계와 달리 개별 1시간 슬롯 단위 카운트다.
+        응답이 없는 슬롯도 카운트 0 으로 모두 포함한다(히트맵 격자 채우기).
+      responses:
+        '200':
+          description: 슬롯별 집계
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          meetingId: { type: integer }
+                          slots:
+                            type: array
+                            items: { $ref: '#/components/schemas/SlotAggregate' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
   /api/meetings/{meetingId}/participants/{participantId}:
     parameters:
       - $ref: '#/components/parameters/MeetingId'
@@ -721,6 +756,15 @@ components:
         slotId: { type: integer }
         startAt: { type: string, format: date-time }
         endAt: { type: string, format: date-time }
+    SlotAggregate:
+      type: object
+      required: [slotId, startAt, availableCount, maybeCount, unavailableCount]
+      properties:
+        slotId: { type: integer }
+        startAt: { type: string, format: date-time }
+        availableCount: { type: integer }    # 이 슬롯에 '가능'을 찍은 참여자 수
+        maybeCount: { type: integer }        # '애매'
+        unavailableCount: { type: integer }  # '불가'
     AvailabilityItem:
       type: object
       required: [slotId, status]

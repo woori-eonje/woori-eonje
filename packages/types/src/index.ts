@@ -252,6 +252,26 @@ export interface SlotsResponse {
   slots: Slot[];
 }
 
+// ── API DTO: 응답 현황 히트맵 (GET /api/meetings/{meetingId}/aggregate) ──
+// 슬롯별 가능/애매/불가 카운트. 추천 엔진의 window 단위 집계와 달리 개별 1시간 슬롯 단위다.
+export interface SlotAggregate {
+  slotId: number;
+  /** ISO 8601 date-time — 슬롯 시작 */
+  startAt: string;
+  /** 이 슬롯에 '가능'을 찍은 참여자 수 */
+  availableCount: number;
+  /** '애매' */
+  maybeCount: number;
+  /** '불가' */
+  unavailableCount: number;
+}
+
+export interface AggregateResponse {
+  meetingId: number;
+  /** slotStartAt 오름차순. 응답 없는 슬롯도 카운트 0 으로 포함. */
+  slots: SlotAggregate[];
+}
+
 export interface AvailabilityItem {
   slotId: number;
   status: AvailabilityStatus;

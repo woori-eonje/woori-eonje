@@ -15,6 +15,7 @@ import {
 import type { Response } from 'express';
 import { SkipEnvelope } from '../common/skip-envelope.decorator';
 import type {
+  AggregateResponse,
   ConfirmMeetingRequest,
   ConfirmResult,
   CreateMeetingRequest,
@@ -71,6 +72,16 @@ export class MeetingsController {
     @Param('meetingId', ParseIntPipe) meetingId: number,
   ): Promise<ParticipantsResponse> {
     return this.meetingsService.listParticipants(meetingId, req.user.id);
+  }
+
+  // GET /api/meetings/:meetingId/aggregate — 응답 현황 히트맵 (JWT + 모임장 소유)
+  @Get(':meetingId/aggregate')
+  @UseGuards(JwtAuthGuard)
+  getAggregate(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+  ): Promise<AggregateResponse> {
+    return this.meetingsService.getAggregate(meetingId, req.user.id);
   }
 
   // PATCH /api/meetings/:meetingId/participants/:participantId
