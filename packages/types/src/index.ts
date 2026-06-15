@@ -228,6 +228,16 @@ export interface SetParticipantRequiredRequest {
   isRequired: boolean;
 }
 
+// ── API DTO: 참여자 목록 (GET /api/meetings/{meetingId}/participants) ──
+export interface ParticipantWithStatus extends Participant {
+  /** 가능시간을 1개라도 제출했는지 */
+  hasResponded: boolean;
+}
+
+export interface ParticipantsResponse {
+  participants: ParticipantWithStatus[];
+}
+
 // ── API DTO: 슬롯 / 가능시간 제출 (GET slots, POST availability) ────
 export interface Slot {
   slotId: number;

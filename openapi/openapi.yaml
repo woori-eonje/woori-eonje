@@ -191,6 +191,36 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /api/meetings/{meetingId}/participants:
+    parameters:
+      - $ref: '#/components/parameters/MeetingId'
+    get:
+      tags: [Meetings]
+      operationId: listParticipants
+      summary: 참여자 목록 (모임장 — 필수참석자 지정 화면)
+      responses:
+        '200':
+          description: 참여자 목록
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          participants:
+                            type: array
+                            items: { $ref: '#/components/schemas/ParticipantWithStatus' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
   /api/meetings/{meetingId}/participants/{participantId}:
     parameters:
       - $ref: '#/components/parameters/MeetingId'
@@ -677,6 +707,12 @@ components:
         guestName: { type: string }
         participantType: { $ref: '#/components/schemas/ParticipantType' }
         isRequired: { type: boolean }
+    ParticipantWithStatus:
+      allOf:
+        - $ref: '#/components/schemas/Participant'
+        - type: object
+          properties:
+            hasResponded: { type: boolean }   # 가능시간을 1개라도 제출했는지
 
     # ── Slots / Availability ──
     Slot:

@@ -22,6 +22,7 @@ import type {
   MeetingDetail,
   MeetingSummary,
   Participant,
+  ParticipantsResponse,
   SetParticipantRequiredRequest,
 } from '@whenwe/types';
 import {
@@ -60,6 +61,16 @@ export class MeetingsController {
     @Param('meetingId', ParseIntPipe) meetingId: number,
   ): Promise<MeetingDetail> {
     return this.meetingsService.getMeeting(meetingId, req.user.id);
+  }
+
+  // GET /api/meetings/:meetingId/participants — 참여자 목록 (JWT + 모임장 소유)
+  @Get(':meetingId/participants')
+  @UseGuards(JwtAuthGuard)
+  listParticipants(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+  ): Promise<ParticipantsResponse> {
+    return this.meetingsService.listParticipants(meetingId, req.user.id);
   }
 
   // PATCH /api/meetings/:meetingId/participants/:participantId

@@ -10,6 +10,7 @@ import {
   MeetingStatus,
   type MeetingSummary,
   type Participant,
+  type ParticipantsResponse,
 } from '@whenwe/types';
 import { DomainException } from '../common/domain-exception';
 import { assertMeetingOwner, meetingNotFound } from '../common/meeting-access';
@@ -187,6 +188,47 @@ export class MeetingsService {
         : null,
       participantCount: meeting._count.participants,
       respondedCount: responded.length,
+    };
+  }
+
+  // GET /api/meetings/:meetingId/participants — JWT + 모임장 소유. 필수참석자 지정 화면용.
+  async listParticipants(
+    meetingId: number,
+    userId: number,
+  ): Promise<ParticipantsResponse> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    const participants = await this.prisma.participant.findMany({
+      where: { meetingId },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        guestName: true,
+        participantType: true,
+        isRequired: true,
+      },
+    });
+
+    // 응답(가능시간 1개라도 제출)한 participantId 집합 — 단일 distinct 쿼리.
+    const responded = await this.prisma.participantAvailability.findMany({
+      where: { meetingId },
+      distinct: ['participantId'],
+      select: { participantId: true },
+    });
+    const respondedSet = new Set(responded.map((r) => r.participantId));
+
+    return {
+      participants: participants.map((p) => ({
+        participantId: p.id,
+        guestName: p.guestName,
+        participantType: p.participantType,
+        isRequired: p.isRequired,
+        hasResponded: respondedSet.has(p.id),
+      })),
     };
   }
 
