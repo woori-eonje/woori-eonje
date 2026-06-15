@@ -109,19 +109,43 @@ export class MeetingsService {
         id: true,
         title: true,
         status: true,
+        category: true,
         startDate: true,
         endDate: true,
         responseDeadline: true,
+        _count: { select: { participants: true } },
       },
     });
+
+    // respondedCount(가능시간을 1개라도 제출한 참여자 수)는 모임별 distinct 참여자 집계.
+    // N+1 을 피해 한 번의 쿼리로 모든 모임의 (meetingId, participantId) distinct 를 받아 JS 에서 센다.
+    const meetingIds = meetings.map((m) => m.id);
+    const respondedRows =
+      meetingIds.length === 0
+        ? []
+        : await this.prisma.participantAvailability.findMany({
+            where: { meetingId: { in: meetingIds } },
+            distinct: ['meetingId', 'participantId'],
+            select: { meetingId: true },
+          });
+    const respondedByMeeting = new Map<number, number>();
+    for (const r of respondedRows) {
+      respondedByMeeting.set(
+        r.meetingId,
+        (respondedByMeeting.get(r.meetingId) ?? 0) + 1,
+      );
+    }
 
     return meetings.map((m) => ({
       meetingId: m.id,
       title: m.title,
       status: m.status,
+      category: m.category,
       startDate: m.startDate.toISOString().slice(0, 10),
       endDate: m.endDate.toISOString().slice(0, 10),
       responseDeadline: m.responseDeadline.toISOString(),
+      participantCount: m._count.participants,
+      respondedCount: respondedByMeeting.get(m.id) ?? 0,
     }));
   }
 
@@ -133,17 +157,24 @@ export class MeetingsService {
     });
     assertMeetingOwner(meeting, userId);
 
+    // respondedCount: 가능시간을 1개라도 제출한 distinct 참여자 수.
+    const responded = await this.prisma.participantAvailability.findMany({
+      where: { meetingId },
+      distinct: ['participantId'],
+      select: { participantId: true },
+    });
+
     const webBaseUrl = process.env.WEB_BASE_URL ?? 'http://localhost:3000';
 
     return {
       meetingId: meeting.id,
       title: meeting.title,
       status: meeting.status,
+      category: meeting.category,
       startDate: meeting.startDate.toISOString().slice(0, 10),
       endDate: meeting.endDate.toISOString().slice(0, 10),
       responseDeadline: meeting.responseDeadline.toISOString(),
       description: meeting.description,
-      category: meeting.category,
       availableStartTime: meeting.availableStartTime,
       availableEndTime: meeting.availableEndTime,
       durationHours: meeting.durationHours,
@@ -155,6 +186,7 @@ export class MeetingsService {
         ? meeting.confirmedEndAt.toISOString()
         : null,
       participantCount: meeting._count.participants,
+      respondedCount: responded.length,
     };
   }
 

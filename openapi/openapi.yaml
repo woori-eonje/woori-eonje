@@ -621,23 +621,24 @@ components:
         meetingId: { type: integer }
         title: { type: string }
         status: { $ref: '#/components/schemas/MeetingStatus' }
+        category: { $ref: '#/components/schemas/MeetingCategory' }
         startDate: { type: string, format: date }
         endDate: { type: string, format: date }
         responseDeadline: { type: string, format: date-time }
+        participantCount: { type: integer }    # 전체 참여자 수
+        respondedCount: { type: integer }       # 응답을 제출한 distinct 참여자 수(상태 무관, '가능' 수 아님)
     MeetingDetail:
       allOf:
         - $ref: '#/components/schemas/MeetingSummary'
         - type: object
           properties:
             description: { type: [string, 'null'] }
-            category: { $ref: '#/components/schemas/MeetingCategory' }
             availableStartTime: { type: string }
             availableEndTime: { type: string }
             durationHours: { type: integer }
             inviteUrl: { type: string, format: uri }
             confirmedStartAt: { type: [string, 'null'], format: date-time }
             confirmedEndAt: { type: [string, 'null'], format: date-time }
-            participantCount: { type: integer }
     ConfirmResult:
       type: object
       properties:
@@ -661,6 +662,8 @@ components:
         availableStartTime: { type: string, description: 'HH:mm' }
         availableEndTime: { type: string, description: 'HH:mm' }
         responseDeadline: { type: string, format: date-time }
+        confirmedStartAt: { type: [string, 'null'], format: date-time }   # CONFIRMED 일 때만 채워짐
+        confirmedEndAt: { type: [string, 'null'], format: date-time }
     ParticipantRegistered:
       type: object
       properties:

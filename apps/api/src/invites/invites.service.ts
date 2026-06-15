@@ -49,6 +49,12 @@ export class InvitesService {
       availableStartTime: meeting.availableStartTime,
       availableEndTime: meeting.availableEndTime,
       responseDeadline: meeting.responseDeadline.toISOString(),
+      confirmedStartAt: meeting.confirmedStartAt
+        ? meeting.confirmedStartAt.toISOString()
+        : null,
+      confirmedEndAt: meeting.confirmedEndAt
+        ? meeting.confirmedEndAt.toISOString()
+        : null,
     };
   }
 

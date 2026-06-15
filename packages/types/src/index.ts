@@ -151,17 +151,21 @@ export interface MeetingSummary {
   meetingId: number;
   title: string;
   status: MeetingStatus;
+  category: MeetingCategory;
   /** YYYY-MM-DD */
   startDate: string;
   /** YYYY-MM-DD */
   endDate: string;
   /** ISO 8601 date-time */
   responseDeadline: string;
+  /** 전체 참여자 수 */
+  participantCount: number;
+  /** 응답을 제출한 distinct 참여자 수 (가능/애매/불가 중 하나라도 제출하면 포함 — '가능' 수가 아님) */
+  respondedCount: number;
 }
 
 export interface MeetingDetail extends MeetingSummary {
   description: string | null;
-  category: MeetingCategory;
   /** HH:mm */
   availableStartTime: string;
   /** HH:mm */
@@ -173,7 +177,6 @@ export interface MeetingDetail extends MeetingSummary {
   confirmedStartAt: string | null;
   /** ISO 8601 date-time — 미확정이면 null */
   confirmedEndAt: string | null;
-  participantCount: number;
 }
 
 // ── API DTO: 초대 공개 정보 (GET /api/invites/{inviteToken}) ────
@@ -195,6 +198,10 @@ export interface InvitePublic {
   availableEndTime: string;
   /** ISO 8601 date-time */
   responseDeadline: string;
+  /** ISO 8601 date-time — CONFIRMED 일 때만, 아니면 null */
+  confirmedStartAt: string | null;
+  /** ISO 8601 date-time — CONFIRMED 일 때만, 아니면 null */
+  confirmedEndAt: string | null;
 }
 
 // ── API DTO: 비회원 참여자 등록 (POST /api/invites/{inviteToken}/participants)
