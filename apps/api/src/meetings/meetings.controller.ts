@@ -49,7 +49,7 @@ export class MeetingsController {
     return this.meetingsService.createMeeting(req.user.id, body);
   }
 
-  // GET /api/meetings — 내 모임 목록 (JWT 필요, owner 본인 것만)
+  // GET /api/meetings — 내 모임 목록 (JWT 필요): 내가 만든 모임 + 회원으로 참여한 모임
   @Get()
   @UseGuards(JwtAuthGuard)
   listMyMeetings(@Req() req: AuthenticatedRequest): Promise<MeetingSummary[]> {

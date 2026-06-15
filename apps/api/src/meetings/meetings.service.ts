@@ -9,6 +9,7 @@ import {
   MeetingCategory,
   type MeetingCreated,
   type MeetingDetail,
+  MeetingRole,
   MeetingStatus,
   type MeetingSummary,
   type Participant,
@@ -182,10 +183,16 @@ export class MeetingsService {
     return this.getMeeting(meetingId, userId);
   }
 
-  // GET /api/meetings — JWT 필요. 로그인 사용자가 owner 인 모임만 목록 반환.
-  async listMyMeetings(ownerId: number): Promise<MeetingSummary[]> {
+  // GET /api/meetings — JWT 필요. 내가 만든 모임(ORGANIZER) + 회원으로 참여한 모임(PARTICIPANT).
+  async listMyMeetings(userId: number): Promise<MeetingSummary[]> {
     const meetings = await this.prisma.meeting.findMany({
-      where: { ownerId },
+      where: {
+        OR: [
+          { ownerId: userId },
+          // 참여자(MEMBER)로 등록된 모임 — userId 가 채워진 participant 만 매칭(게스트 제외).
+          { participants: { some: { userId } } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -195,6 +202,7 @@ export class MeetingsService {
         startDate: true,
         endDate: true,
         responseDeadline: true,
+        ownerId: true,
         _count: { select: { participants: true } },
       },
     });
@@ -228,6 +236,9 @@ export class MeetingsService {
       responseDeadline: m.responseDeadline.toISOString(),
       participantCount: m._count.participants,
       respondedCount: respondedByMeeting.get(m.id) ?? 0,
+      // 내가 owner 면 ORGANIZER, 아니면 참여자(PARTICIPANT). 둘 다면 owner 우선.
+      role:
+        m.ownerId === userId ? MeetingRole.ORGANIZER : MeetingRole.PARTICIPANT,
     }));
   }
 
@@ -269,6 +280,8 @@ export class MeetingsService {
         : null,
       participantCount: meeting._count.participants,
       respondedCount: responded.length,
+      // 모임장 전용 엔드포인트(assertMeetingOwner 통과) — 항상 ORGANIZER.
+      role: MeetingRole.ORGANIZER,
     };
   }
 

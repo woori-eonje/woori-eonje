@@ -88,7 +88,9 @@
 - **도메인 영향**: 현재 "식별 = participant_id + edit_token, 동일 닉네임 허용" 규칙에 **"같은 user가 같은 모임 중복 참여 방지"**(userId+meetingId unique?) 추가 필요. edit_token vs userId 식별 이원화.
 - **계약/스키마**: 큰 변경 없음(userId 컬럼 이미 있음). 식별 규칙 정리 필요.
 
-### #5 🔴 `GET /meetings` 에 "참여한 모임" + `role`
+### #5 ✅🔴 `GET /meetings` 에 "참여한 모임" + `role`
+> 구현(#4 의존): listMyMeetings 를 owned + participated(participants.userId=나, MEMBER만) 합집합으로. MeetingSummary.role(ORGANIZER|PARTICIPANT), 둘 다면 owner 우선. getMeeting 은 owner 전용이라 ORGANIZER 고정.
+
 - **무엇**: 내가 만든 모임뿐 아니라 **참여자로 등록된 모임**도 목록에.
 - **의존성**: **#4 선행**(MEMBER로 userId 연동돼 있어야 "내가 참여한 모임"을 조회 가능).
 - **백엔드**: owned(ownerId=me) + participated(participants.userId=me) 합집합, `role: ORGANIZER|PARTICIPANT`.

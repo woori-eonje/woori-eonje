@@ -151,7 +151,10 @@ paths:
     get:
       tags: [Meetings]
       operationId: listMyMeetings
-      summary: 내 모임 목록 (추가 — 내 모임 목록 화면)
+      summary: 내 모임 목록 (내가 만든 모임 + 참여한 모임)
+      description: |
+        내가 만든 모임(role=ORGANIZER)과 회원(MEMBER)으로 참여한 모임(role=PARTICIPANT)을
+        함께 반환한다. 둘 다 해당하면 ORGANIZER 로 표기.
       responses:
         '200':
           description: 모임 목록
@@ -679,6 +682,9 @@ components:
     ParticipantType:
       type: string
       enum: [MEMBER, GUEST]
+    MeetingRole:
+      type: string
+      enum: [ORGANIZER, PARTICIPANT]
     ErrorCode:
       type: string
       enum:
@@ -772,6 +778,7 @@ components:
         responseDeadline: { type: string, format: date-time }
         participantCount: { type: integer }    # 전체 참여자 수
         respondedCount: { type: integer }       # 응답을 제출한 distinct 참여자 수(상태 무관, '가능' 수 아님)
+        role: { $ref: '#/components/schemas/MeetingRole' }   # 내 역할(ORGANIZER|PARTICIPANT)
     MeetingDetail:
       allOf:
         - $ref: '#/components/schemas/MeetingSummary'

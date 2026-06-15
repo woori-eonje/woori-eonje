@@ -44,6 +44,14 @@ export const ParticipantType = {
 export type ParticipantType =
   (typeof ParticipantType)[keyof typeof ParticipantType];
 
+// 내 모임 목록에서 그 모임에 대한 내 역할 — 내가 만든 모임이면 ORGANIZER,
+// 참여자로 등록된(MEMBER) 모임이면 PARTICIPANT.
+export const MeetingRole = {
+  ORGANIZER: 'ORGANIZER',
+  PARTICIPANT: 'PARTICIPANT',
+} as const;
+export type MeetingRole = (typeof MeetingRole)[keyof typeof MeetingRole];
+
 // ── 에러 코드 (기획서 24장) ────────────────────────────────────
 export const ErrorCode = {
   MEETING_NOT_FOUND: 'MEETING_NOT_FOUND',
@@ -173,6 +181,8 @@ export interface MeetingSummary {
   participantCount: number;
   /** 응답을 제출한 distinct 참여자 수 (가능/애매/불가 중 하나라도 제출하면 포함 — '가능' 수가 아님) */
   respondedCount: number;
+  /** 이 모임에 대한 내 역할 — 내가 만들었으면 ORGANIZER, 참여자(MEMBER)면 PARTICIPANT */
+  role: MeetingRole;
 }
 
 export interface MeetingDetail extends MeetingSummary {
