@@ -7,7 +7,10 @@ import 'dotenv/config';
 import { PrismaClient, MeetingCategory, MeetingStatus } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { hashSync } from 'bcryptjs';
-import { generateSlots } from '../src/meetings/slot-generation';
+import {
+  expandDateRange,
+  generateSlots,
+} from '../src/meetings/slot-generation';
 
 // 데모 모임장 로그인 평문 비밀번호(테스트용): demo1234
 const DEMO_OWNER_PASSWORD = 'demo1234';
@@ -72,12 +75,14 @@ async function main(): Promise<void> {
 
   const [startHour] = meeting.availableStartTime.split(':').map(Number); // 18
   const [endHour] = meeting.availableEndTime.split(':').map(Number); //     23
-  const slots = generateSlots(
+  const dates = expandDateRange(
     meeting.startDate.toISOString().slice(0, 10),
     meeting.endDate.toISOString().slice(0, 10),
-    startHour,
-    endHour,
-  ).map((s) => ({ meetingId: meeting.id, ...s }));
+  );
+  const slots = generateSlots(dates, startHour, endHour).map((s) => ({
+    meetingId: meeting.id,
+    ...s,
+  }));
 
   await prisma.availabilitySlot.createMany({ data: slots });
 

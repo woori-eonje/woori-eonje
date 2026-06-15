@@ -14,7 +14,9 @@
 - ✅ 데모 시드 2027 미래화(데모 복구) — 커밋 `8e142a7`
 - ✅ **#3** `GET /api/meetings/{id}/aggregate`(응답현황 히트맵) — owner 가드 + 슬롯별 groupBy 집계
 - ✅ **#9** `DELETE /api/meetings/{id}`(모임 삭제) — owner 가드 + cascade, 200 Empty, P2025→404
-- ⬜ #8 → ⬜ #6
+- ✅ **#8** `PATCH /api/meetings/{id}`(모임 수정) — COLLECTING+응답자0명만, 슬롯 재생성, RESPONSE_ALREADY_EXISTS·MEETING_NOT_EDITABLE(409)
+- ✅ **#6** `POST /api/meetings` `dates[]`(특정 날짜) — generateSlots 일반화(expandDateRange), 범위 부분집합 검증. update도 자동 지원
+- ⬜ 1차 백로그 완료. 다음은 도메인 결정(#7·#4·#5)
 - 🟡 보류(도메인 결정 먼저): #7 · #4 · #5
 
 ---
@@ -51,13 +53,13 @@
 
 ## B. 보통 — 계약/로직 확장
 
-### #8 🟡 `PATCH /api/meetings/{id}` 모임 수정
+### #8 ✅🟡 `PATCH /api/meetings/{id}` 모임 수정
 - **무엇**: 응답자 없을 때만 수정 허용.
 - **백엔드**: owner 가드 + `respondedCount === 0` 검증(아니면 409). 날짜/시간/소요 바뀌면 **슬롯 재생성**(기존 삭제 후 generateSlots) — create 로직 상당 부분 재사용. 새 ErrorCode `RESPONSE_ALREADY_EXISTS`(FE가 제안한 이름).
 - **의존성**: #1(respondedCount 계산) 로직 공유.
 - **계약**: 신규 PATCH path + ErrorCode 추가.
 
-### #6 🟡 `POST /api/meetings` 에 `dates[]` (특정 날짜)
+### #6 ✅🟡 `POST /api/meetings` 에 `dates[]` (특정 날짜)
 - **무엇**: 범위 대신 특정 날짜들만 후보로.
 - **백엔드**: `dates` optional 배열. 있으면 그 날짜들로만 슬롯 생성, 없으면 기존 범위. `generateSlots` 를 "날짜 목록 받는" 형태로 일반화(범위→날짜목록으로 변환해 한 경로로). 14일 상한·검증 조정.
 - **계약**: `CreateMeetingRequest`에 `dates?: string[]`.

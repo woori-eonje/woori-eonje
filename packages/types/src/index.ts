@@ -51,6 +51,8 @@ export const ErrorCode = {
   INVITE_TOKEN_EXPIRED: 'INVITE_TOKEN_EXPIRED',
   RESPONSE_DEADLINE_PASSED: 'RESPONSE_DEADLINE_PASSED',
   MEETING_ALREADY_CONFIRMED: 'MEETING_ALREADY_CONFIRMED',
+  RESPONSE_ALREADY_EXISTS: 'RESPONSE_ALREADY_EXISTS',
+  MEETING_NOT_EDITABLE: 'MEETING_NOT_EDITABLE',
   PARTICIPANT_EDIT_TOKEN_INVALID: 'PARTICIPANT_EDIT_TOKEN_INVALID',
   FORBIDDEN_MEETING_OWNER_ONLY: 'FORBIDDEN_MEETING_OWNER_ONLY',
   RECOMMENDATION_NOT_READY: 'RECOMMENDATION_NOT_READY',
@@ -135,7 +137,16 @@ export interface CreateMeetingRequest {
   durationHours: number;
   /** ISO 8601 date-time */
   responseDeadline: string;
+  /**
+   * 선택: 범위 내 특정 날짜들(YYYY-MM-DD)만 슬롯으로 생성한다.
+   * 없으면 startDate~endDate 전체 범위를 사용. 각 날짜는 범위 안이어야 하고 중복 불가.
+   */
+  dates?: string[];
 }
+
+// 모임 수정(PATCH /api/meetings/{meetingId}) — 생성과 동일 필드 전체 교체.
+// 응답자가 0명일 때만 허용되며, 날짜/시간/소요 변경 시 슬롯이 재생성된다.
+export type UpdateMeetingRequest = CreateMeetingRequest;
 
 export interface MeetingCreated {
   meetingId: number;

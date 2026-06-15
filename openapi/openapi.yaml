@@ -190,6 +190,41 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+    patch:
+      tags: [Meetings]
+      operationId: updateMeeting
+      summary: 모임 수정 (모임장)
+      description: |
+        수집 중(COLLECTING)이고 응답자가 한 명도 없을 때만 수정할 수 있다.
+        응답자가 있으면 409 RESPONSE_ALREADY_EXISTS, 수집 중이 아니면(마감 경과로
+        READY_TO_CONFIRM 전환·확정·마감) 409 MEETING_NOT_EDITABLE.
+        생성과 동일 필드를 전체 교체하며, 날짜/시간/소요 변경에 따라 시간 슬롯이 재생성된다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateMeetingRequest' }
+      responses:
+        '200':
+          description: 수정 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/MeetingDetail' }
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
     delete:
       tags: [Meetings]
       operationId: deleteMeeting
@@ -637,6 +672,8 @@ components:
         - INVITE_TOKEN_EXPIRED
         - RESPONSE_DEADLINE_PASSED
         - MEETING_ALREADY_CONFIRMED
+        - RESPONSE_ALREADY_EXISTS
+        - MEETING_NOT_EDITABLE
         - PARTICIPANT_EDIT_TOKEN_INVALID
         - FORBIDDEN_MEETING_OWNER_ONLY
         - RECOMMENDATION_NOT_READY
@@ -687,6 +724,10 @@ components:
         availableEndTime: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', description: 'HH:mm (1시간 슬롯 단위라 정시만 — 분=00)' }
         durationHours: { type: integer, minimum: 1, maximum: 12 }
         responseDeadline: { type: string, format: date-time }
+        dates:
+          type: array
+          items: { type: string, format: date }
+          description: '선택: 범위(startDate~endDate) 내 특정 날짜들만 슬롯 생성. 없으면 전체 범위. 각 날짜는 범위 안, 중복 불가.'
       example:
         title: 6월 전시 모임
         description: 6월 초에 전시 보러 갈 사람들 일정 조율

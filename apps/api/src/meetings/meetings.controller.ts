@@ -26,6 +26,7 @@ import type {
   Participant,
   ParticipantsResponse,
   SetParticipantRequiredRequest,
+  UpdateMeetingRequest,
 } from '@whenwe/types';
 import {
   JwtAuthGuard,
@@ -73,6 +74,17 @@ export class MeetingsController {
     @Param('meetingId', ParseIntPipe) meetingId: number,
   ): Promise<ParticipantsResponse> {
     return this.meetingsService.listParticipants(meetingId, req.user.id);
+  }
+
+  // PATCH /api/meetings/:meetingId — 모임 수정 (JWT + 모임장 소유). 응답자 0명일 때만.
+  @Patch(':meetingId')
+  @UseGuards(JwtAuthGuard)
+  updateMeeting(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+    @Body() body: UpdateMeetingRequest,
+  ): Promise<MeetingDetail> {
+    return this.meetingsService.updateMeeting(meetingId, req.user.id, body);
   }
 
   // DELETE /api/meetings/:meetingId — 모임 삭제 (JWT + 모임장 소유). 봉투 200 + Empty.

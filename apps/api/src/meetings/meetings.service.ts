@@ -19,7 +19,7 @@ import { assertMeetingOwner, meetingNotFound } from '../common/meeting-access';
 import { PrismaService } from '../prisma/prisma.service';
 import { RecommendationsService } from '../recommendations/recommendations.service';
 import { buildICS } from './ics';
-import { generateSlots } from './slot-generation';
+import { expandDateRange, generateSlots } from './slot-generation';
 
 const MAX_PERIOD_DAYS = 14;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -42,12 +42,10 @@ export class MeetingsService {
 
     const [startHour] = input.availableStartTime.split(':').map(Number);
     const [endHour] = input.availableEndTime.split(':').map(Number);
-    const slots = generateSlots(
-      input.startDate,
-      input.endDate,
-      startHour,
-      endHour,
-    );
+    // 특정 날짜가 주어지면 그 날짜들만, 아니면 전체 범위를 펼쳐 슬롯 생성.
+    const dates =
+      input.dates ?? expandDateRange(input.startDate, input.endDate);
+    const slots = generateSlots(dates, startHour, endHour);
 
     const inviteToken = randomUUID();
     const responseDeadline = new Date(input.responseDeadline);
@@ -101,6 +99,87 @@ export class MeetingsService {
       status: meeting.status,
       inviteUrl: `${webBaseUrl}/invite/${meeting.inviteToken}`,
     };
+  }
+
+  // PATCH /api/meetings/:meetingId — JWT + 모임장 소유. 응답자 0명일 때만 수정 허용.
+  // 생성과 동일 필드를 전체 교체하고, 슬롯을 재생성한다(응답자 0명이라 보존할 가용성 없음).
+  // 스테일 추천결과도 정리. validate()/generateSlots 를 createMeeting 과 그대로 공유.
+  async updateMeeting(
+    meetingId: number,
+    userId: number,
+    body: CreateMeetingRequest,
+  ): Promise<MeetingDetail> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true, status: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    // 수정은 수집 중(COLLECTING)일 때만 — 도메인의 "상태별 액션 강제 제한".
+    // 마감이 지나 READY_TO_CONFIRM 으로 전환됐거나 확정/마감된 모임은 응답자 0명이어도
+    // 수정 불가(종료된 모임을 미래 마감으로 재오픈하는 것을 막는다).
+    if (meeting.status !== MeetingStatus.COLLECTING) {
+      throw new DomainException(
+        ErrorCode.MEETING_NOT_EDITABLE,
+        HttpStatus.CONFLICT,
+        '수집 중인 모임만 수정할 수 있습니다.',
+      );
+    }
+
+    const input = this.validate(body);
+    const [startHour] = input.availableStartTime.split(':').map(Number);
+    const [endHour] = input.availableEndTime.split(':').map(Number);
+    const dates =
+      input.dates ?? expandDateRange(input.startDate, input.endDate);
+    const slots = generateSlots(dates, startHour, endHour);
+    const responseDeadline = new Date(input.responseDeadline);
+
+    // 응답 존재 검사를 트랜잭션 안에서 재확인한다 — 가드와 슬롯 재생성 사이에 응답이
+    // 들어오면 deleteMany 의 cascade 로 그 응답이 소리 없이 삭제될 수 있어, 같은
+    // 트랜잭션에서 다시 확인하고 있으면 롤백한다(confirmMeeting 의 경합 방어와 정합).
+    await this.prisma.$transaction(async (tx) => {
+      const existingResponse = await tx.participantAvailability.findFirst({
+        where: { meetingId },
+        select: { id: true },
+      });
+      if (existingResponse) {
+        throw new DomainException(
+          ErrorCode.RESPONSE_ALREADY_EXISTS,
+          HttpStatus.CONFLICT,
+          '이미 응답한 참여자가 있어 모임을 수정할 수 없습니다.',
+        );
+      }
+
+      await tx.meeting.update({
+        where: { id: meetingId },
+        data: {
+          title: input.title,
+          description: input.description,
+          category: input.category,
+          startDate: new Date(`${input.startDate}T00:00:00Z`),
+          endDate: new Date(`${input.endDate}T00:00:00Z`),
+          availableStartTime: input.availableStartTime,
+          availableEndTime: input.availableEndTime,
+          durationHours: input.durationHours,
+          responseDeadline,
+          // 초대 토큰 만료는 마감과 동기화(생성 로직과 동일 정책).
+          inviteTokenExpiresAt: responseDeadline,
+        },
+      });
+      // 슬롯 전면 재생성(응답자 0명이라 cascade 로 지워질 가용성 행이 없음).
+      await tx.availabilitySlot.deleteMany({ where: { meetingId } });
+      await tx.availabilitySlot.createMany({
+        data: slots.map((slot) => ({
+          meetingId,
+          slotStartAt: slot.slotStartAt,
+          slotEndAt: slot.slotEndAt,
+        })),
+      });
+      // 슬롯이 바뀌면 기존 추천결과는 스테일 — 정리(다음 응답 제출 시 재계산).
+      await tx.recommendationResult.deleteMany({ where: { meetingId } });
+    });
+
+    return this.getMeeting(meetingId, userId);
   }
 
   // GET /api/meetings — JWT 필요. 로그인 사용자가 owner 인 모임만 목록 반환.
@@ -506,6 +585,7 @@ export class MeetingsService {
     availableEndTime: string;
     durationHours: number;
     responseDeadline: string;
+    dates?: string[];
   } {
     if (!body || typeof body !== 'object') {
       throw new BadRequestException('요청 본문이 올바르지 않습니다.');
@@ -561,6 +641,39 @@ export class MeetingsService {
       throw new BadRequestException(
         `조율 기간은 최대 ${MAX_PERIOD_DAYS}일입니다.`,
       );
+    }
+
+    // 특정 날짜 목록(선택). 있으면 범위 안의 부분집합이어야 하고 형식·중복을 검증한다.
+    let dates: string[] | undefined;
+    if (body.dates !== undefined && body.dates !== null) {
+      if (!Array.isArray(body.dates) || body.dates.length === 0) {
+        throw new BadRequestException(
+          'dates 는 비어 있지 않은 날짜 배열이어야 합니다.',
+        );
+      }
+      const seen = new Set<string>();
+      for (const d of body.dates) {
+        if (
+          typeof d !== 'string' ||
+          !DATE_PATTERN.test(d) ||
+          Number.isNaN(Date.parse(`${d}T00:00:00+09:00`))
+        ) {
+          throw new BadRequestException(
+            'dates 항목 형식(YYYY-MM-DD)이 올바르지 않습니다.',
+          );
+        }
+        const dMs = Date.parse(`${d}T00:00:00+09:00`);
+        if (dMs < startMs || dMs > endMs) {
+          throw new BadRequestException(
+            'dates 는 시작일~종료일 범위 안이어야 합니다.',
+          );
+        }
+        if (seen.has(d)) {
+          throw new BadRequestException('dates 에 중복된 날짜가 있습니다.');
+        }
+        seen.add(d);
+      }
+      dates = body.dates;
     }
 
     if (
@@ -644,6 +757,7 @@ export class MeetingsService {
       availableEndTime: body.availableEndTime,
       durationHours: body.durationHours,
       responseDeadline: body.responseDeadline,
+      dates,
     };
   }
 }

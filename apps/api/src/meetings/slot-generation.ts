@@ -12,18 +12,12 @@ export interface GeneratedSlot {
 }
 
 /**
+ * 양끝 포함 날짜 범위를 KST 기준 YYYY-MM-DD 문자열 목록으로 펼친다.
  * @param startDate YYYY-MM-DD (양끝 포함 시작일)
  * @param endDate   YYYY-MM-DD (양끝 포함 종료일)
- * @param startHour 가능시간 창 시작 시(정수, HH:mm 의 HH)
- * @param endHour   가능시간 창 종료 시(정수, HH:mm 의 HH)
  */
-export function generateSlots(
-  startDate: string,
-  endDate: string,
-  startHour: number,
-  endHour: number,
-): GeneratedSlot[] {
-  const slots: GeneratedSlot[] = [];
+export function expandDateRange(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
 
   // 날짜만 KST 자정(UTC 환경에서도 동일) 기준으로 순회한다.
   // KST 자정 Date 끼리 24h 씩 더하면 날짜 경계가 정확히 맞는다.
@@ -36,16 +30,35 @@ export function generateSlots(
     const yyyy = kstMidnightUtc.getUTCFullYear();
     const mm = String(kstMidnightUtc.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(kstMidnightUtc.getUTCDate()).padStart(2, '0');
-    const dateStr = `${yyyy}-${mm}-${dd}`;
+    dates.push(`${yyyy}-${mm}-${dd}`);
 
+    cursor.setTime(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  return dates;
+}
+
+/**
+ * 날짜 목록 × 매일 가능시간 창을 1시간 슬롯으로 생성한다.
+ * 전체 범위는 expandDateRange 로, 특정 날짜만이면 그 목록을 그대로 넘긴다.
+ * @param dates     슬롯을 만들 날짜 목록(YYYY-MM-DD)
+ * @param startHour 가능시간 창 시작 시(정수, HH:mm 의 HH)
+ * @param endHour   가능시간 창 종료 시(정수, HH:mm 의 HH)
+ */
+export function generateSlots(
+  dates: string[],
+  startHour: number,
+  endHour: number,
+): GeneratedSlot[] {
+  const slots: GeneratedSlot[] = [];
+
+  for (const dateStr of dates) {
     for (let hour = startHour; hour < endHour; hour++) {
       const hh = String(hour).padStart(2, '0');
       const slotStartAt = new Date(`${dateStr}T${hh}:00:00+09:00`);
       const slotEndAt = new Date(slotStartAt.getTime() + 60 * 60 * 1000);
       slots.push({ slotStartAt, slotEndAt });
     }
-
-    cursor.setTime(cursor.getTime() + 24 * 60 * 60 * 1000);
   }
 
   return slots;
