@@ -4,23 +4,33 @@
 이 문서는 그걸 **백엔드 관점**에서 분류한다 — 난이도 · 계약/스키마 영향 · 도메인 결정 필요 여부 · 의존성 · 권장 순서.
 
 > 범례: 🟢 작음(반나절) · 🟡 보통(1일) · 🔴 큼(설계 결정 동반)
+> 진행: ✅ 완료 · ⬜ 미착수
+
+## 진행 현황 (2026-06-16)
+
+- ✅ **#1** `MeetingSummary` + `respondedCount`·`category` — 커밋 `235ff78`
+- ✅ **#3.5** `InvitePublic` + `confirmedStartAt`·`confirmedEndAt` — 커밋 `235ff78`
+- ✅ **#2** `GET /api/meetings/{id}/participants` — 커밋 `c6912ad`
+- ✅ 데모 시드 2027 미래화(데모 복구) — 커밋 `8e142a7`
+- ⬜ **#3**(히트맵, 다음) → ⬜ #9 → ⬜ #8 → ⬜ #6
+- 🟡 보류(도메인 결정 먼저): #7 · #4 · #5
 
 ---
 
 ## A. 바로 가능 (계약 소폭 확장, 도메인 결정 불필요)
 
-### #1 🟢 `MeetingSummary` + `respondedCount`·`category`
+### #1 ✅🟢 `MeetingSummary` + `respondedCount`·`category`
 - **무엇**: 내 모임 목록 카드의 "0/0명·친구" 하드코딩 해소.
 - **백엔드**: `respondedCount` = 그 모임에서 **availability 행이 1개 이상인 participant 수**(`distinct participantId` from `participant_availability`). `category`는 컬럼 그대로.
 - **계약**: `MeetingSummary`에 2필드 추가(openapi+types). listMyMeetings 매핑.
 - **주의**: "0/0명"의 분모(전체 참여자 수)도 필요하면 `participantCount`도 같이. (FE 요청은 respondedCount만이지만 화면이 `n/m`이면 m도 필요 — FE와 확인)
 
-### #3.5 🟢 `InvitePublic` + `confirmedStartAt`·`confirmedEndAt`
+### #3.5 ✅🟢 `InvitePublic` + `confirmedStartAt`·`confirmedEndAt`
 - **무엇**: CONFIRMED 모임 초대 링크에서 확정 시간 표시(현재 "준비 중" 임시 문구).
 - **백엔드**: status==='CONFIRMED'일 때만 채움(아니면 null). meeting의 confirmed* 그대로.
 - **계약**: `InvitePublic`에 nullable 2필드. **공개 엔드포인트라 확정시간이 공개됨** — 의도된 동작(링크 가진 사람이 확정시간 봄). OK.
 
-### #2 🟡 `GET /api/meetings/{id}/participants` 신규
+### #2 ✅🟡 `GET /api/meetings/{id}/participants` 신규
 - **무엇**: 필수참석자 지정 UI(블로커). 참여자 목록 + 응답 여부.
 - **백엔드**: 신규 엔드포인트(owner 가드). `{ participantId, guestName, participantType, isRequired, hasResponded }[]`. hasResponded = availability 행 존재.
 - **계약**: 신규 path + `ParticipantWithStatus`(또는 기존 `Participant`+hasResponded) 타입.
