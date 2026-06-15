@@ -10,6 +10,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { DomainException } from '../common/domain-exception';
 import { RecommendationsService } from '../recommendations/recommendations.service';
+import { buildWindows } from '../meetings/slot-generation';
 
 @Injectable()
 export class AvailabilityService {
@@ -32,13 +33,18 @@ export class AvailabilityService {
       orderBy: { slotStartAt: 'asc' },
     });
 
+    const mapped = slots.map((slot) => ({
+      slotId: slot.id,
+      startAt: slot.slotStartAt.toISOString(),
+      endAt: slot.slotEndAt.toISOString(),
+    }));
+
     return {
       meetingId,
-      slots: slots.map((slot) => ({
-        slotId: slot.id,
-        startAt: slot.slotStartAt.toISOString(),
-        endAt: slot.slotEndAt.toISOString(),
-      })),
+      durationHours: meeting.durationHours,
+      slots: mapped,
+      // 소요시간 길이 블록(연속 슬롯 묶음) — FE 블록 선택 UX 용. 1h 슬롯은 그대로 유지.
+      windows: buildWindows(mapped, meeting.durationHours),
     };
   }
 

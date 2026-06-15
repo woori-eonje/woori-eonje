@@ -11,6 +11,57 @@ export interface GeneratedSlot {
   slotEndAt: Date;
 }
 
+export interface WindowSlot {
+  slotId: number;
+  /** ISO 8601 date-time */
+  startAt: string;
+  /** ISO 8601 date-time */
+  endAt: string;
+}
+
+export interface SlotWindowResult {
+  startAt: string;
+  endAt: string;
+  slotIds: number[];
+}
+
+/**
+ * 연속 N(=durationHours)개 1시간 슬롯을 한 후보 구간(블록)으로 묶는다.
+ * 추천 엔진의 후보 생성과 같은 연속성 규칙(slot[i].endAt === slot[i+1].startAt)을 쓰되,
+ * 여기서는 표시·선택용으로 slotIds 까지 함께 노출한다. DB·집계는 1시간 슬롯을 그대로 유지.
+ * @param slots slotStartAt 오름차순 정렬된 슬롯들
+ */
+export function buildWindows(
+  slots: WindowSlot[],
+  durationHours: number,
+): SlotWindowResult[] {
+  const windows: SlotWindowResult[] = [];
+  if (durationHours < 1) {
+    return windows;
+  }
+
+  for (let i = 0; i + durationHours <= slots.length; i++) {
+    const window = slots.slice(i, i + durationHours);
+    let contiguous = true;
+    for (let j = 0; j + 1 < window.length; j++) {
+      if (window[j].endAt !== window[j + 1].startAt) {
+        contiguous = false;
+        break;
+      }
+    }
+    if (!contiguous) {
+      continue;
+    }
+    windows.push({
+      startAt: window[0].startAt,
+      endAt: window[window.length - 1].endAt,
+      slotIds: window.map((s) => s.slotId),
+    });
+  }
+
+  return windows;
+}
+
 /**
  * 양끝 포함 날짜 범위를 KST 기준 YYYY-MM-DD 문자열 목록으로 펼친다.
  * @param startDate YYYY-MM-DD (양끝 포함 시작일)

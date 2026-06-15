@@ -472,9 +472,13 @@ paths:
                         type: object
                         properties:
                           meetingId: { type: integer }
+                          durationHours: { type: integer }
                           slots:
                             type: array
                             items: { $ref: '#/components/schemas/Slot' }
+                          windows:
+                            type: array
+                            items: { $ref: '#/components/schemas/SlotWindow' }
         '404':
           $ref: '#/components/responses/Error'
 
@@ -821,6 +825,16 @@ components:
         slotId: { type: integer }
         startAt: { type: string, format: date-time }
         endAt: { type: string, format: date-time }
+    SlotWindow:
+      type: object
+      required: [startAt, endAt, slotIds]
+      properties:
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        slotIds:
+          type: array
+          items: { type: integer }
+          description: '블록을 구성하는 연속 1시간 슬롯 id들(길이 = durationHours)'
     SlotAggregate:
       type: object
       required: [slotId, startAt, availableCount, maybeCount, unavailableCount]

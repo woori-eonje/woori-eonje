@@ -108,6 +108,8 @@ export function computeRecommendations(input: EngineInput): RankedCandidate[] {
   }));
 }
 
+// 연속성 규칙(slot[i].end === slot[i+1].start)은 slot-generation.ts 의 buildWindows
+// (GET slots 의 표시용 블록)와 공유된다 — 한쪽을 바꾸면 다른 쪽도 같이 바꿔야 동일한 블록 집합이 유지된다.
 function isContiguous(window: EngineSlot[]): boolean {
   for (let i = 0; i + 1 < window.length; i++) {
     if (window[i].slotEndAt !== window[i + 1].slotStartAt) {

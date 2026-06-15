@@ -258,9 +258,26 @@ export interface Slot {
   endAt: string;
 }
 
+/**
+ * 소요시간 길이의 후보 구간(연속 N개 1시간 슬롯 묶음). FE 는 이 블록 단위로 선택 UX 를
+ * 표시하고, 선택 시 slotIds 의 1시간 슬롯들을 같은 상태로 제출한다(DB·추천엔진은 1h 슬롯 유지).
+ */
+export interface SlotWindow {
+  /** ISO 8601 date-time — 블록 시작(첫 슬롯 시작) */
+  startAt: string;
+  /** ISO 8601 date-time — 블록 끝(마지막 슬롯 끝) */
+  endAt: string;
+  /** 이 블록을 구성하는 1시간 슬롯 id들(연속, 길이 = durationHours) */
+  slotIds: number[];
+}
+
 export interface SlotsResponse {
   meetingId: number;
+  /** 예상 소요 시간(블록 길이 N) — FE 가 windows 표시에 사용 */
+  durationHours: number;
   slots: Slot[];
+  /** 소요시간 길이 블록 목록. 연속 슬롯이 부족하면 빈 배열. */
+  windows: SlotWindow[];
 }
 
 // ── API DTO: 응답 현황 히트맵 (GET /api/meetings/{meetingId}/aggregate) ──
