@@ -11,7 +11,7 @@ import type {
   SubmitAvailabilityResponse,
 } from "@whenwe/types";
 import type { SlotState } from "@/types/meeting";
-import { apiGet, apiPost } from "./api";
+import { apiGet, apiPost, authGet, authPost } from "./api";
 
 const TZ = "Asia/Seoul";
 
@@ -75,15 +75,19 @@ export async function fetchSlots(meetingId: number): Promise<DayGroup[]> {
   return groupSlotsByDay(res.slots);
 }
 
-/** 내 기존 응답을 화면 picks(Record<slotId, SlotState>)로. */
+/**
+ * 내 기존 응답을 화면 picks 로. editToken 이 있으면 비회원(헤더), null 이면 회원(JWT).
+ */
 export async function fetchMyPicks(
   meetingId: number,
-  editToken: string,
+  editToken: string | null,
 ): Promise<Record<number, SlotState>> {
-  const me = await apiGet<MyAvailability>(
-    `/api/meetings/${meetingId}/availability/me`,
-    { "X-Participant-Edit-Token": editToken },
-  );
+  const path = `/api/meetings/${meetingId}/availability/me`;
+  const me = editToken !== null
+    ? await apiGet<MyAvailability>(path, {
+        "X-Participant-Edit-Token": editToken,
+      })
+    : await authGet<MyAvailability>(path);
   const picks: Record<number, SlotState> = {};
   for (const it of me.items) picks[it.slotId] = FROM_API[it.status];
   return picks;
@@ -91,7 +95,7 @@ export async function fetchMyPicks(
 
 export function submitAvailability(
   meetingId: number,
-  editToken: string,
+  editToken: string | null,
   participantId: number,
   picks: Record<number, SlotState>,
 ): Promise<SubmitAvailabilityResponse> {
@@ -99,9 +103,11 @@ export function submitAvailability(
     ([slotId, state]) => ({ slotId: Number(slotId), status: TO_API[state] }),
   );
   const body: SubmitAvailabilityRequest = { participantId, items };
-  return apiPost<SubmitAvailabilityResponse>(
-    `/api/meetings/${meetingId}/availability`,
-    body,
-    { "X-Participant-Edit-Token": editToken },
-  );
+  const path = `/api/meetings/${meetingId}/availability`;
+  // 회원(editToken null)은 JWT, 비회원은 edit_token 헤더.
+  return editToken !== null
+    ? apiPost<SubmitAvailabilityResponse>(path, body, {
+        "X-Participant-Edit-Token": editToken,
+      })
+    : authPost<SubmitAvailabilityResponse>(path, body);
 }

@@ -4,22 +4,26 @@ import type {
   ParticipantRegistered,
   RegisterParticipantRequest,
 } from "@whenwe/types";
-import { apiPost } from "./api";
+import { apiPost, authPost } from "./api";
 
+// useAuth=true (로그인 상태)면 Bearer 를 실어 보내 회원(MEMBER)으로 연동된다.
+// 아니면 기존 비회원(GUEST) 등록. 회원은 응답을 edit_token 대신 JWT 로 식별한다.
 export function registerParticipant(
   token: string,
   guestName: string,
+  useAuth = false,
 ): Promise<ParticipantRegistered> {
   const body: RegisterParticipantRequest = { guestName };
-  return apiPost<ParticipantRegistered>(
-    `/api/invites/${encodeURIComponent(token)}/participants`,
-    body,
-  );
+  const path = `/api/invites/${encodeURIComponent(token)}/participants`;
+  return useAuth
+    ? authPost<ParticipantRegistered>(path, body)
+    : apiPost<ParticipantRegistered>(path, body);
 }
 
 export interface StoredParticipant {
   participantId: number;
-  editToken: string;
+  /** 비회원(GUEST)의 응답 수정 토큰. 회원(MEMBER)은 JWT 로 식별하므로 null. */
+  editToken: string | null;
   guestName: string;
 }
 

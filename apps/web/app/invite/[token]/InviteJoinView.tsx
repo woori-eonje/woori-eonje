@@ -33,14 +33,8 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await registerParticipant(token, name.trim());
-      // 비회원(GUEST) 등록은 항상 edit token 을 발급한다. null 은 회원(MEMBER, Bearer)
-      // 경로인데 현재 화면은 비회원만 등록하므로 도달하지 않는다(#4 FE 연동 시 JWT 사용).
-      if (res.participantEditToken == null) {
-        setError("로그인 참여는 아직 준비 중이에요. 닉네임으로 참여해 주세요.");
-        setSubmitting(false);
-        return;
-      }
+      // 로그인 상태면 Bearer 를 실어 회원(MEMBER)으로 연동. 회원은 editToken 이 null.
+      const res = await registerParticipant(token, name.trim(), isLoggedIn);
       saveParticipant(token, {
         participantId: res.participantId,
         editToken: res.participantEditToken,
@@ -48,6 +42,11 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
       });
       router.push(`/invite/${token}/time-select`);
     } catch (e) {
+      // 로그인 참여인데 토큰이 만료/부재면 로그인으로 유도.
+      if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
+        router.push(`/login?redirect=${encodeURIComponent(`/invite/${token}`)}`);
+        return;
+      }
       setError(
         e instanceof ApiError ? e.message : "참여에 실패했어요. 잠시 후 다시 시도해 주세요.",
       );

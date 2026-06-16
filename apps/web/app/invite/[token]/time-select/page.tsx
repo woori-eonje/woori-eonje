@@ -50,7 +50,13 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
         setDays(dayGroups);
         setActiveDate(dayGroups[0]?.dateKey ?? "");
         setPicks(myPicks);
-      } catch {
+      } catch (e) {
+        // 회원(JWT) 경로에서 토큰이 없거나 만료면 로그인으로 유도(authGet 은 request() 밖에서
+        // throw 라 자동 리다이렉트가 안 걸린다). 그 외는 일반 에러 + 재시도.
+        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
+          router.replace(`/login?redirect=${encodeURIComponent(`/invite/${token}/time-select`)}`);
+          return;
+        }
         setError("시간 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
       } finally {
         setLoading(false);
@@ -109,6 +115,10 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
       await submitAvailability(vm.meetingId, participant.editToken, participant.participantId, picks);
       router.push(`/invite/${token}/submitted`);
     } catch (e) {
+      if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
+        router.replace(`/login?redirect=${encodeURIComponent(`/invite/${token}/time-select`)}`);
+        return;
+      }
       setError(
         e instanceof ApiError ? e.message : "제출에 실패했어요. 잠시 후 다시 시도해 주세요.",
       );
@@ -167,7 +177,9 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
           {vm.periodLabel} · 예상 <b style={{ color: "var(--color-text)" }}>{vm.durationLabel}</b> · 마감{" "}
           <b style={{ color: "var(--color-text)" }}>{vm.deadlineLabel}</b>
         </div>
-        <div className="t-cap">비회원 참여 중 · 응답 마감일까지 수정할 수 있어요</div>
+        <div className="t-cap">
+          {participant?.editToken === null ? "회원" : "비회원"} 참여 중 · 응답 마감일까지 수정할 수 있어요
+        </div>
       </div>
 
       {/* Date tabs */}
