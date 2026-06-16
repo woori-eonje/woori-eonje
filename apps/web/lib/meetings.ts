@@ -7,8 +7,9 @@ import type {
   RecommendationsResponse,
   ConfirmResult,
   AggregateResponse,
+  UpdateMeetingRequest,
 } from "@whenwe/types";
-import { authGet, authPost } from "./api";
+import { authGet, authPost, authPatch, authDelete } from "./api";
 
 export function createMeeting(body: CreateMeetingRequest): Promise<MeetingCreated> {
   return authPost<MeetingCreated>("/api/meetings", body);
@@ -28,6 +29,17 @@ export function getRecommendations(meetingId: number): Promise<RecommendationsRe
 
 export function getAggregate(meetingId: number): Promise<AggregateResponse> {
   return authGet<AggregateResponse>(`/api/meetings/${meetingId}/aggregate`);
+}
+
+export function updateMeeting(
+  meetingId: number,
+  body: UpdateMeetingRequest,
+): Promise<MeetingDetail> {
+  return authPatch<MeetingDetail>(`/api/meetings/${meetingId}`, body);
+}
+
+export function deleteMeeting(meetingId: number): Promise<Record<string, never>> {
+  return authDelete<Record<string, never>>(`/api/meetings/${meetingId}`);
 }
 
 export function confirmMeeting(meetingId: number, recommendationId: number): Promise<ConfirmResult> {

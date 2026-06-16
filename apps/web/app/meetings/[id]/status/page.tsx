@@ -6,6 +6,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
 import { TopBar, Button, StatusPill, type MeetingStatus as PillStatus } from "@/components/primitives";
 import { Copy, Users, Clock, ChevronRight } from "@/components/icons";
+import { MeetingActions } from "@/components/meeting/MeetingActions";
 import { getMeeting } from "@/lib/meetings";
 import { ApiError, getToken } from "@/lib/api";
 import type { MeetingDetail } from "@whenwe/types";
@@ -175,6 +176,13 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
           </div>
           <ChevronRight size={18} color="var(--color-text-muted)" />
         </button>
+
+        {/* 모임 관리 (모임장) */}
+        {meeting && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
+            <MeetingActions meeting={meeting} />
+          </div>
+        )}
 
       </div>
 

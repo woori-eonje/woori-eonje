@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
 import { Logo, Button } from "@/components/primitives";
+import { MeetingActions } from "@/components/meeting/MeetingActions";
 import { Check, Clock, PlusCircle, Copy, Share } from "@/components/icons";
 import { getMeeting, getRecommendations, confirmMeeting, getAggregate } from "@/lib/meetings";
 import { ApiError, getToken } from "@/lib/api";
@@ -232,6 +233,7 @@ function MeetingHero({ meeting }: { meeting: MeetingDetail | null }) {
         }}>
           <Copy size={15} color="var(--color-primary)" /> {copied ? "복사됨!" : "링크 복사"}
         </button>
+        {meeting && <MeetingActions meeting={meeting} />}
       </div>
     </div>
   );
