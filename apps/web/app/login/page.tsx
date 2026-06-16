@@ -1,13 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Logo } from "@/components/primitives";
 import { login, signup } from "@/lib/auth";
 import { ApiError, getToken } from "@/lib/api";
 
+// useSearchParams 는 정적 프리렌더 시 Suspense 경계가 필요하다(Next 빌드 요구).
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="screen white" style={{ background: "var(--color-bg)" }} />}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") ?? "/meetings";

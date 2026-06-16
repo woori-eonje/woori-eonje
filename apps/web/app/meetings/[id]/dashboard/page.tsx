@@ -7,7 +7,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
 import { Logo, Button } from "@/components/primitives";
 import { MeetingActions } from "@/components/meeting/MeetingActions";
-import { Check, Clock, PlusCircle, Copy, Share } from "@/components/icons";
+import { Check, Clock, PlusCircle, Copy } from "@/components/icons";
 import { getMeeting, getRecommendations, confirmMeeting, getAggregate } from "@/lib/meetings";
 import { ApiError, getToken } from "@/lib/api";
 import type { MeetingDetail, Recommendation as ApiRec, SlotAggregate } from "@whenwe/types";
@@ -665,13 +665,19 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
   const [agg, setAgg] = useState<SlotAggregate[] | null>(null);
   const [aggError, setAggError] = useState(false);
 
-  const loadAggregate = useCallback(() => {
-    setAggError(false);
-    setAgg(null);
+  // 조회만(상태 setter 는 .then/.catch 안 — effect 에서 동기 setState 회피).
+  const fetchAggregate = useCallback(() => {
     getAggregate(mid)
       .then((res) => setAgg(res.slots))
       .catch(() => setAggError(true));
   }, [mid]);
+
+  // 재시도·수정 후: 로딩 상태로 되돌린 뒤 다시 조회.
+  const loadAggregate = useCallback(() => {
+    setAggError(false);
+    setAgg(null);
+    fetchAggregate();
+  }, [fetchAggregate]);
 
   useEffect(() => {
     if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
@@ -683,8 +689,9 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
     getRecommendations(mid)
       .then((res) => setRecs(res.recommendations))
       .catch(() => {});
-    loadAggregate();
-  }, [mid, router, loadAggregate]);
+    // 초기값이 이미 null(로딩) 이라 reset 없이 조회만 — effect 내 동기 setState 회피.
+    fetchAggregate();
+  }, [mid, router, fetchAggregate]);
 
   return (
     <div style={{ minHeight: "100dvh", background: "var(--color-bg)" }}>

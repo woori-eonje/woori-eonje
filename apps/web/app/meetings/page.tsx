@@ -116,7 +116,7 @@ export default function MyMeetingsPage() {
       router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
       return;
     }
-    setLoading(true);
+    // loading 초기값이 이미 true 라 여기서 다시 set 하지 않는다(불필요한 재렌더 방지).
     listMeetings()
       .then((list) => {
         setMeetings(list.map(toMeeting));

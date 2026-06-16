@@ -19,7 +19,10 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
   const valid = name.trim().length >= 2;
 
   useEffect(() => {
+    // 로그인 여부는 localStorage 토큰(클라이언트 전용)이라 렌더 중 읽으면 hydration
+    // 불일치가 난다 → 마운트 후 effect 에서 1회 감지. 의도된 동기 setState.
     if (!getToken()) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoggedIn(true);
     getMe().then((user) => setName(user.nickname)).catch(() => {});
   }, []);
