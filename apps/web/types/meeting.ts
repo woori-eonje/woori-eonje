@@ -31,6 +31,8 @@ export interface Meeting {
   responseCount: number;
   totalCount: number;
   inviteToken?: string;
+  /** 내 역할 — 내가 만든 모임(ORGANIZER) vs 참여한 모임(PARTICIPANT) */
+  role?: "ORGANIZER" | "PARTICIPANT";
 }
 
 export interface Participant {

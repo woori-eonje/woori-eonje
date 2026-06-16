@@ -7,6 +7,8 @@ import type { Meeting } from "@/types/meeting";
 
 interface MeetingCardProps {
   meeting: Meeting;
+  /** false 면 비대화형(클릭 이동 없음) — 참여한 모임은 아직 참여자 전용 상세 화면이 없어 정보용으로만 표시 */
+  interactive?: boolean;
 }
 
 function resolveHref(meeting: Meeting): string {
@@ -17,18 +19,18 @@ function resolveHref(meeting: Meeting): string {
   return `/meetings/${meeting.id}/status`;
 }
 
-export function MeetingCard({ meeting }: MeetingCardProps) {
+export function MeetingCard({ meeting, interactive = true }: MeetingCardProps) {
   const router = useRouter();
 
   return (
     <div
-      onClick={() => router.push(resolveHref(meeting))}
+      onClick={interactive ? () => router.push(resolveHref(meeting)) : undefined}
       style={{
         background: "var(--color-surface)",
         border: "1px solid var(--color-line)",
         borderRadius: 20, padding: 20,
         display: "flex", flexDirection: "column", gap: 12,
-        cursor: "pointer",
+        cursor: interactive ? "pointer" : "default",
         transition: "box-shadow 160ms",
       }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>

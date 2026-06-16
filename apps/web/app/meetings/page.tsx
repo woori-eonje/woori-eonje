@@ -10,7 +10,15 @@ import type { Meeting } from "@/types/meeting";
 import { listMeetings } from "@/lib/meetings";
 import { logout } from "@/lib/auth";
 import { ApiError, getToken } from "@/lib/api";
-import type { MeetingSummary } from "@whenwe/types";
+import type { MeetingSummary, MeetingCategory } from "@whenwe/types";
+
+type RoleKey = "ORGANIZER" | "PARTICIPANT";
+
+const CATEGORY_MAP: Record<MeetingCategory, Meeting["category"]> = {
+  FRIEND: "friend",
+  STUDY: "study",
+  BUSINESS: "business",
+};
 
 type TabKey = "active" | "confirm" | "confirmed" | "closed";
 
@@ -28,8 +36,6 @@ const FILTER: Record<TabKey, Meeting["status"][]> = {
   closed:    ["CLOSED"],
 };
 
-// MeetingSummary에는 category 없음 — MeetingCard가 category를 쓰지만 MeetingSummary에는 없어서 기본값 사용.
-// 상세 정보는 dashboard/page.tsx 에서 MeetingDetail로 가져옴.
 function toMeeting(s: MeetingSummary): Meeting {
   const deadline = new Date(s.responseDeadline);
   const deadlineLabel = `${deadline.getMonth() + 1}.${deadline.getDate()}`;
@@ -40,19 +46,28 @@ function toMeeting(s: MeetingSummary): Meeting {
   return {
     id: String(s.meetingId),
     title: s.title,
-    category: "friend",
+    category: CATEGORY_MAP[s.category] ?? "friend",
     status: s.status as unknown as Meeting["status"],
     dateRange,
     startDate: s.startDate,
     endDate: s.endDate,
     deadline: deadlineLabel,
     responseDeadline: s.responseDeadline,
-    responseCount: 0,
-    totalCount: 0,
+    responseCount: s.respondedCount,
+    totalCount: s.participantCount,
+    role: s.role,
   };
 }
 
-function EmptyMeetings({ tab }: { tab: TabKey }) {
+function EmptyMeetings({ tab, role }: { tab: TabKey; role: RoleKey }) {
+  if (role === "PARTICIPANT") {
+    return (
+      <div style={{ padding: "48px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", color: "var(--color-text)" }}>참여한 모임이 없어요</div>
+        <div className="t-body2">초대 링크로 로그인해서 참여하면 여기에 모여요.</div>
+      </div>
+    );
+  }
   const messages: Record<TabKey, { title: string; sub: string }> = {
     active:    { title: "진행 중인 모임이 없어요", sub: "새 모임을 만들어 일정을 조율해보세요." },
     confirm:   { title: "확정이 필요한 모임이 없어요", sub: "응답이 마감된 모임이 여기 나타나요." },
@@ -85,6 +100,7 @@ function EmptyMeetings({ tab }: { tab: TabKey }) {
 
 export default function MyMeetingsPage() {
   const router = useRouter();
+  const [roleTab, setRoleTab] = useState<RoleKey>("ORGANIZER");
   const [tab, setTab] = useState<TabKey>("active");
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +131,14 @@ export default function MyMeetingsPage() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  const filtered = meetings.filter((m) => FILTER[tab].includes(m.status));
+  // 어느 상태 버킷에도 속하지 않는 status(예: 미사용 DRAFT, 향후 추가 enum)는
+  // '진행 중' 탭으로 흡수해 목록에서 조용히 사라지지 않게 한다.
+  const KNOWN_STATUSES = new Set(Object.values(FILTER).flat());
+  const filtered = meetings.filter((m) => {
+    if ((m.role ?? "ORGANIZER") !== roleTab) return false;
+    if (FILTER[tab].includes(m.status)) return true;
+    return tab === "active" && !KNOWN_STATUSES.has(m.status);
+  });
 
   return (
     <div className="screen">
@@ -138,6 +161,29 @@ export default function MyMeetingsPage() {
           >
             로그아웃
           </button>
+        </div>
+        {/* 역할 전환 — 내가 만든 / 참여한 */}
+        <div style={{ display: "inline-flex", gap: 4, padding: 3, background: "var(--color-bg-2)", borderRadius: 999, marginBottom: 12 }}>
+          {([
+            { key: "ORGANIZER" as RoleKey, label: "내가 만든" },
+            { key: "PARTICIPANT" as RoleKey, label: "참여한" },
+          ]).map((r) => (
+            <button
+              key={r.key}
+              onClick={() => setRoleTab(r.key)}
+              style={{
+                height: 32, padding: "0 16px", borderRadius: 999, border: 0,
+                background: roleTab === r.key ? "var(--color-surface)" : "transparent",
+                color: roleTab === r.key ? "var(--color-primary)" : "var(--color-text-2)",
+                fontFamily: "inherit", fontSize: 13, fontWeight: 700, letterSpacing: "-0.015em",
+                cursor: "pointer",
+                boxShadow: roleTab === r.key ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                transition: "background 160ms, color 160ms",
+              }}
+            >
+              {r.label}
+            </button>
+          ))}
         </div>
         <div className="tab-bar" style={{ borderBottom: "none" }}>
           {TABS.map((t) => (
@@ -176,9 +222,11 @@ export default function MyMeetingsPage() {
             </button>
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyMeetings tab={tab} />
+          <EmptyMeetings tab={tab} role={roleTab} />
         ) : (
-          filtered.map((m) => <MeetingCard key={m.id} meeting={m} />)
+          filtered.map((m) => (
+            <MeetingCard key={m.id} meeting={m} interactive={roleTab === "ORGANIZER"} />
+          ))
         )}
       </div>
 
