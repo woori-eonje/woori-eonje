@@ -179,8 +179,8 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
 
         {/* 모임 관리 (모임장) */}
         {meeting && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4 }}>
-            <MeetingActions meeting={meeting} />
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+            <MeetingActions meeting={meeting} onUpdated={setMeeting} />
           </div>
         )}
 

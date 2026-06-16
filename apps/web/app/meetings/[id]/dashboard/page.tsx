@@ -139,7 +139,7 @@ function AppHeader() {
 /* ══════════════════════════════════════════════════════
    미팅 히어로 스트립
 ══════════════════════════════════════════════════════ */
-function MeetingHero({ meeting }: { meeting: MeetingDetail | null }) {
+function MeetingHero({ meeting, onUpdated }: { meeting: MeetingDetail | null; onUpdated?: (m: MeetingDetail) => void }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     if (meeting?.inviteUrl) navigator.clipboard.writeText(meeting.inviteUrl).catch(() => {});
@@ -233,7 +233,7 @@ function MeetingHero({ meeting }: { meeting: MeetingDetail | null }) {
         }}>
           <Copy size={15} color="var(--color-primary)" /> {copied ? "복사됨!" : "링크 복사"}
         </button>
-        {meeting && <MeetingActions meeting={meeting} />}
+        {meeting && <MeetingActions meeting={meeting} onUpdated={onUpdated} />}
       </div>
     </div>
   );
@@ -698,7 +698,10 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
           <span style={{ color: "var(--color-text)", fontWeight: 700 }}>{meeting?.title ?? "–"}</span>
         </div>
 
-        <MeetingHero meeting={meeting} />
+        <MeetingHero
+          meeting={meeting}
+          onUpdated={(m) => { setMeeting(m); loadAggregate(); }}
+        />
         <PageTabs tab={tab} setTab={setTab} />
 
         {tab === "aggregate"
