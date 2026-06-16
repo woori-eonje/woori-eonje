@@ -3,6 +3,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
 import type {
   Slot,
+  SlotWindow,
   SlotsResponse,
   AvailabilityItem,
   AvailabilityStatus,
@@ -73,6 +74,55 @@ export function groupSlotsByDay(slots: Slot[]): DayGroup[] {
 export async function fetchSlots(meetingId: number): Promise<DayGroup[]> {
   const res = await apiGet<SlotsResponse>(`/api/meetings/${meetingId}/slots`);
   return groupSlotsByDay(res.slots);
+}
+
+// ── 소요시간 블록(windows) — 참여자 선택 단위 ──
+export interface WindowItem {
+  /** 블록 식별 키(첫 슬롯 시작 ISO) */
+  key: string;
+  /** 이 블록을 구성하는 1시간 슬롯 id들 — 제출은 이 단위로 */
+  slotIds: number[];
+  /** "오후 6:00 – 8:00" */
+  label: string;
+}
+export interface WindowDayGroup {
+  dateKey: string;
+  label: string;
+  weekday: string;
+  weekend: boolean;
+  windows: WindowItem[];
+}
+
+/** windows(ISO)를 KST 날짜별로 묶어 화면 구조로. 블록 라벨은 시작–끝 시각. */
+export function groupWindowsByDay(windows: SlotWindow[]): WindowDayGroup[] {
+  const ordered = [...windows].sort((a, b) => a.startAt.localeCompare(b.startAt));
+  const map = new Map<string, WindowDayGroup>();
+  for (const w of ordered) {
+    const dateKey = formatInTimeZone(w.startAt, TZ, "yyyy-MM-dd");
+    let g = map.get(dateKey);
+    if (!g) {
+      const dow = formatInTimeZone(w.startAt, TZ, "i");
+      g = {
+        dateKey,
+        label: formatInTimeZone(w.startAt, TZ, "M.d"),
+        weekday: formatInTimeZone(w.startAt, TZ, "EEE", { locale: ko }),
+        weekend: dow === "6" || dow === "7",
+        windows: [],
+      };
+      map.set(dateKey, g);
+    }
+    const start = formatInTimeZone(w.startAt, TZ, "a h:mm", { locale: ko });
+    const end = formatInTimeZone(w.endAt, TZ, "h:mm", { locale: ko });
+    g.windows.push({ key: w.startAt, slotIds: w.slotIds, label: `${start} – ${end}` });
+  }
+  return [...map.values()];
+}
+
+export async function fetchSlotWindows(
+  meetingId: number,
+): Promise<WindowDayGroup[]> {
+  const res = await apiGet<SlotsResponse>(`/api/meetings/${meetingId}/slots`);
+  return groupWindowsByDay(res.windows);
 }
 
 /**

@@ -11,11 +11,27 @@ import { ApiError } from "@/lib/api";
 import { fetchInvite, toInviteVM, type InviteVM } from "@/lib/invite";
 import { loadParticipant, type StoredParticipant } from "@/lib/participant";
 import {
-  fetchSlots,
+  fetchSlotWindows,
   fetchMyPicks,
   submitAvailability,
-  type DayGroup,
+  type WindowDayGroup,
+  type WindowItem,
 } from "@/lib/availability";
+
+// 한 블록(연속 슬롯 묶음)의 상태: 모든 슬롯이 같은 상태면 그 상태, 아니면 null(미선택/혼합).
+function windowState(
+  slotIds: number[],
+  picks: Record<number, SlotState>,
+): SlotState | null {
+  let s: SlotState | undefined;
+  for (const id of slotIds) {
+    const v = picks[id];
+    if (v === undefined) return null;
+    if (s === undefined) s = v;
+    else if (s !== v) return null;
+  }
+  return s ?? null;
+}
 
 export default function TimeSelectPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -23,7 +39,7 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
 
   const [vm, setVm] = useState<InviteVM | null>(null);
   const [participant, setParticipant] = useState<StoredParticipant | null>(null);
-  const [days, setDays] = useState<DayGroup[]>([]);
+  const [days, setDays] = useState<WindowDayGroup[]>([]);
   const [activeDate, setActiveDate] = useState<string>("");
   const [mode, setMode] = useState<SlotState>("available");
   const [picks, setPicks] = useState<Record<number, SlotState>>({});
@@ -42,7 +58,7 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
       try {
         const invite = toInviteVM(await fetchInvite(token));
         const [dayGroups, myPicks] = await Promise.all([
-          fetchSlots(invite.meetingId),
+          fetchSlotWindows(invite.meetingId),
           fetchMyPicks(invite.meetingId, p.editToken),
         ]);
         setParticipant(p);
@@ -64,29 +80,37 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
     })();
   }, [token, router]);
 
+  // 선택 단위는 블록(window) — 블록 상태(uniform)별로 집계.
   const summary = useMemo(() => {
     let ok = 0, m = 0, x = 0;
-    Object.values(picks).forEach((s) => {
-      if (s === "available") ok++;
-      else if (s === "maybe") m++;
-      else if (s === "unavail") x++;
-    });
+    for (const d of days) {
+      for (const w of d.windows) {
+        const s = windowState(w.slotIds, picks);
+        if (s === "available") ok++;
+        else if (s === "maybe") m++;
+        else if (s === "unavail") x++;
+      }
+    }
     return { ok, m, x, total: ok + m + x };
-  }, [picks]);
+  }, [days, picks]);
 
   const activeDay = days.find((d) => d.dateKey === activeDate);
 
   const dayCount = (dateKey: string) => {
     const d = days.find((g) => g.dateKey === dateKey);
     if (!d) return 0;
-    return d.slots.filter((s) => picks[s.slotId]).length;
+    return d.windows.filter((w) => windowState(w.slotIds, picks) !== null).length;
   };
 
-  const onTapSlot = (slotId: number) => {
+  // 블록 탭: 같은 상태면 해제(슬롯 제거), 아니면 블록의 모든 슬롯을 현재 모드로.
+  const onTapWindow = (w: WindowItem) => {
     setPicks((prev) => {
       const next = { ...prev };
-      if (next[slotId] === mode) delete next[slotId];
-      else next[slotId] = mode;
+      if (windowState(w.slotIds, prev) === mode) {
+        for (const id of w.slotIds) delete next[id];
+      } else {
+        for (const id of w.slotIds) next[id] = mode;
+      }
       return next;
     });
   };
@@ -96,13 +120,13 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
       if (kind === "reset") return {};
       const next = { ...prev };
       if (kind === "clear-day") {
-        activeDay?.slots.forEach((s) => delete next[s.slotId]);
+        activeDay?.windows.forEach((w) => w.slotIds.forEach((id) => delete next[id]));
         return next;
       }
       const wantWeekend = kind === "weekend";
       days
         .filter((d) => d.weekend === wantWeekend)
-        .forEach((d) => d.slots.forEach((s) => (next[s.slotId] = mode)));
+        .forEach((d) => d.windows.forEach((w) => w.slotIds.forEach((id) => (next[id] = mode))));
       return next;
     });
   };
@@ -183,57 +207,71 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
       </div>
 
       {/* Date tabs */}
-      <div className="h-scroll" style={{
-        gap: 6, padding: "12px 16px",
-        background: "var(--color-surface)",
-        borderBottom: "1px solid var(--color-line)",
-      }}>
-        {days.map((d) => (
-          <DateTab
-            key={d.dateKey}
-            label={d.label} weekday={d.weekday}
-            active={activeDate === d.dateKey}
-            count={dayCount(d.dateKey)}
-            onClick={() => setActiveDate(d.dateKey)}
-          />
-        ))}
-      </div>
-
-      {/* Scrollable body */}
-      <div className="scroll" style={{ padding: "16px 20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div className="t-cap">상태를 고른 뒤 시간을 눌러주세요.</div>
-          <ModeToggle value={mode} onChange={setMode} />
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekday")}>
-            평일 전체 선택
-          </button>
-          <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekend")}>
-            주말 전체 선택
-          </button>
-          <button className="chip danger" style={{ justifyContent: "center" }} onClick={() => onQuick("reset")}>
-            전체 초기화
-          </button>
-          <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("clear-day")}>
-            오늘 선택 지우기
-          </button>
-        </div>
-
-        <div className="divider" />
-
-        <div className="slot-grid">
-          {activeDay?.slots.map((s) => (
-            <TimeSlot
-              key={s.slotId}
-              time={s.timeLabel}
-              state={picks[s.slotId] ?? null}
-              onTap={() => onTapSlot(s.slotId)}
+      {days.length > 0 && (
+        <div className="h-scroll" style={{
+          gap: 6, padding: "12px 16px",
+          background: "var(--color-surface)",
+          borderBottom: "1px solid var(--color-line)",
+        }}>
+          {days.map((d) => (
+            <DateTab
+              key={d.dateKey}
+              label={d.label} weekday={d.weekday}
+              active={activeDate === d.dateKey}
+              count={dayCount(d.dateKey)}
+              onClick={() => setActiveDate(d.dateKey)}
             />
           ))}
         </div>
-      </div>
+      )}
+
+      {/* Scrollable body */}
+      {days.length === 0 ? (
+        <div className="scroll" style={{ padding: "48px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 14, textAlign: "center" }}>
+          <p className="t-body2">고를 수 있는 시간 블록이 없어요.</p>
+          <button
+            style={{ background: "transparent", border: "none", color: "var(--color-text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+            onClick={() => router.push(`/invite/${token}`)}
+          >
+            초대 페이지로 돌아가기
+          </button>
+        </div>
+      ) : (
+        <div className="scroll" style={{ padding: "16px 20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="t-cap">상태를 고른 뒤 시간 블록을 눌러주세요. (소요 {vm.durationLabel} 단위)</div>
+            <ModeToggle value={mode} onChange={setMode} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekday")}>
+              평일 전체 선택
+            </button>
+            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekend")}>
+              주말 전체 선택
+            </button>
+            <button className="chip danger" style={{ justifyContent: "center" }} onClick={() => onQuick("reset")}>
+              전체 초기화
+            </button>
+            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("clear-day")}>
+              오늘 선택 지우기
+            </button>
+          </div>
+
+          <div className="divider" />
+
+          <div className="slot-grid">
+            {activeDay?.windows.map((w) => (
+              <TimeSlot
+                key={w.key}
+                time={w.label}
+                state={windowState(w.slotIds, picks)}
+                onTap={() => onTapWindow(w)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Sticky bottom CTA */}
       <div className="bottom-bar">

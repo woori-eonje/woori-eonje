@@ -139,11 +139,32 @@ const RANGE_TIME: Record<string, { s: string; e: string }> = {
 function toYMD(d: Date) { return d.toLocaleDateString("sv"); }
 function toDeadlineISO(d: Date) { return `${toYMD(d)}T23:59:00+09:00`; }
 
+// 범위(from~to, 양끝 포함)를 YMD 문자열 목록으로. 특정 날짜 칩 그리드용.
+function datesInRange(from: Date, to: Date): string[] {
+  const out: string[] = [];
+  const cur = new Date(from); cur.setHours(0, 0, 0, 0);
+  const end = new Date(to); end.setHours(0, 0, 0, 0);
+  while (cur.getTime() <= end.getTime()) {
+    out.push(toYMD(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
+function ymdLabel(ymd: string): { md: string; dow: string } {
+  const d = new Date(`${ymd}T00:00:00`);
+  return { md: `${d.getMonth() + 1}.${d.getDate()}`, dow: WEEKDAY_KO[d.getDay()] };
+}
+
 interface WizardData {
   name: string; desc: string; kind: string;
   from?: Date; to?: Date; due?: Date;
   duration: string; range: string;
   customStart: string; customEnd: string;
+  /** 특정 날짜만 고르기 모드 */
+  useSpecificDates: boolean;
+  /** 선택된 특정 날짜(YMD) — useSpecificDates 일 때만 의미 */
+  selectedDates: string[];
 }
 
 export default function WizardPage() {
@@ -154,6 +175,7 @@ export default function WizardPage() {
     from: undefined, to: undefined, due: undefined,
     duration: "", range: "evening",
     customStart: "09:00", customEnd: "22:00",
+    useSpecificDates: false, selectedDates: [],
   });
   const [copied, setCopied] = useState(false);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -176,6 +198,7 @@ export default function WizardPage() {
       const tr = data.range === "custom"
         ? { s: data.customStart, e: data.customEnd }
         : (RANGE_TIME[data.range] ?? RANGE_TIME["weekday-eve"]);
+      const useDates = data.useSpecificDates && data.selectedDates.length > 0;
       const res = await createMeeting({
         title: data.name,
         description: data.desc || null,
@@ -186,6 +209,8 @@ export default function WizardPage() {
         availableEndTime: tr.e,
         durationHours: DURATION_H[data.duration] ?? 2,
         responseDeadline: toDeadlineISO(data.due!),
+        // 특정 날짜 모드면 선택한 날짜만 슬롯 생성(범위는 그대로 14일 상한·마감 기준).
+        ...(useDates ? { dates: data.selectedDates } : {}),
       });
       setInviteUrl(res.inviteUrl);
       setMeetingId(res.meetingId);
@@ -270,7 +295,7 @@ export default function WizardPage() {
                     </label>
                     <DatePicker
                       value={data.from}
-                      onChange={(d) => set({ from: d, to: undefined, due: undefined })}
+                      onChange={(d) => set({ from: d, to: undefined, due: undefined, selectedDates: [] })}
                       placeholder="시작일 선택"
                       fromDate={today}
                     />
@@ -281,7 +306,7 @@ export default function WizardPage() {
                     </label>
                     <DatePicker
                       value={data.to}
-                      onChange={(d) => set({ to: d })}
+                      onChange={(d) => set({ to: d, selectedDates: [] })}
                       placeholder="종료일 선택"
                       fromDate={data.from ? new Date(data.from.getTime() + 86400000) : today}
                       toDate={maxEnd}
@@ -289,6 +314,57 @@ export default function WizardPage() {
                     />
                     {data.from && <div className="t-cap">최대 14일 ({data.from.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })} ~ {maxEnd?.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })})</div>}
                   </div>
+
+                  {/* 특정 날짜만 고르기 (선택) — 범위 안에서 후보 날짜를 직접 고름 */}
+                  {data.from && data.to && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={data.useSpecificDates}
+                          onChange={(e) => set({ useSpecificDates: e.target.checked, selectedDates: [] })}
+                          style={{ width: 16, height: 16, accentColor: "var(--color-primary)" }}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>이 기간에서 특정 날짜만 고를게요</span>
+                      </label>
+                      {data.useSpecificDates && (
+                        <>
+                          <div className="t-cap">고른 날짜에만 후보 시간이 만들어져요. (예: 주말만)</div>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}>
+                            {datesInRange(data.from, data.to).map((ymd) => {
+                              const on = data.selectedDates.includes(ymd);
+                              const { md, dow } = ymdLabel(ymd);
+                              return (
+                                <button
+                                  key={ymd}
+                                  type="button"
+                                  onClick={() => set({
+                                    selectedDates: on
+                                      ? data.selectedDates.filter((x) => x !== ymd)
+                                      : [...data.selectedDates, ymd],
+                                  })}
+                                  style={{
+                                    minWidth: 52, padding: "8px 10px", borderRadius: 12,
+                                    fontFamily: "inherit", cursor: "pointer", textAlign: "center" as const,
+                                    border: on ? "1.5px solid var(--color-primary)" : "1px solid var(--color-line)",
+                                    background: on ? "var(--color-primary-soft)" : "#fff",
+                                    color: on ? "var(--color-primary)" : "var(--color-text)",
+                                    transition: "all 120ms",
+                                  }}
+                                >
+                                  <div style={{ fontSize: 10, fontWeight: 600, color: on ? "var(--color-primary)" : "var(--color-text-muted)" }}>{dow}</div>
+                                  <div style={{ fontSize: 14, fontWeight: 800, marginTop: 1 }}>{md}</div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {data.selectedDates.length === 0 && (
+                            <div className="t-cap" style={{ color: "var(--color-accent)" }}>최소 한 날짜는 골라주세요.</div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <label style={{ fontSize: 13, fontWeight: 700 }}>
                       응답 수집 마감일 <span style={{ color: "var(--color-accent)" }}>*</span>
@@ -308,8 +384,11 @@ export default function WizardPage() {
             })()}
           </div>
           <div className="bottom-bar">
-            <Button block primary disabled={!data.from || !data.to || !data.due} onClick={handleNext}>다음</Button>
-
+            <Button
+              block primary
+              disabled={!data.from || !data.to || !data.due || (data.useSpecificDates && data.selectedDates.length === 0)}
+              onClick={handleNext}
+            >다음</Button>
           </div>
         </>
       )}
