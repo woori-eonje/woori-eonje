@@ -8,9 +8,9 @@ import { ko } from "date-fns/locale";
 import { Logo, Button } from "@/components/primitives";
 import { MeetingActions } from "@/components/meeting/MeetingActions";
 import { Check, Clock, PlusCircle, Copy } from "@/components/icons";
-import { getMeeting, getRecommendations, confirmMeeting, getAggregate } from "@/lib/meetings";
+import { getMeeting, getRecommendations, confirmMeeting, getAggregate, listParticipants, setParticipantRequired } from "@/lib/meetings";
 import { ApiError, getToken } from "@/lib/api";
-import type { MeetingDetail, Recommendation as ApiRec, SlotAggregate } from "@whenwe/types";
+import type { MeetingDetail, Recommendation as ApiRec, SlotAggregate, ParticipantWithStatus } from "@whenwe/types";
 
 const TZ = "Asia/Seoul";
 const CATEGORY_LABEL: Record<string, string> = {
@@ -504,12 +504,134 @@ function AggregateTab({ slots, meeting, error, onRetry }: {
 }
 
 /* ══════════════════════════════════════════════════════
+   필수 참석자 패널
+══════════════════════════════════════════════════════ */
+function RequiredParticipantsPanel({
+  meetingId,
+  onRecommendationsChanged,
+}: {
+  meetingId: number;
+  onRecommendationsChanged: () => void;
+}) {
+  const [participants, setParticipants] = useState<ParticipantWithStatus[] | null>(null);
+  const [toggling, setToggling] = useState<number | null>(null);
+
+  useEffect(() => {
+    listParticipants(meetingId)
+      .then((res) => setParticipants(res.participants))
+      .catch(() => setParticipants([]));
+  }, [meetingId]);
+
+  const handleToggle = async (p: ParticipantWithStatus) => {
+    if (toggling !== null) return;
+    setToggling(p.participantId);
+    try {
+      const updated = await setParticipantRequired(meetingId, p.participantId, !p.isRequired);
+      setParticipants((prev) =>
+        prev?.map((x) =>
+          x.participantId === updated.participantId ? { ...x, isRequired: updated.isRequired } : x,
+        ) ?? prev,
+      );
+      onRecommendationsChanged();
+    } catch {
+      // 실패 시 상태 롤백 없이 조용히 무시 — 토글 UI가 원상태로 돌아옴
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  if (participants === null) {
+    return (
+      <div className="card tight" style={{ padding: 22 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 12 }}>필수 참석자</div>
+        {[...Array(3)].map((_, i) => (
+          <span key={i} className="skeleton" style={{ display: "block", height: 40, borderRadius: 8, marginBottom: 6 }} />
+        ))}
+      </div>
+    );
+  }
+
+  if (participants.length === 0) {
+    return (
+      <div className="card tight" style={{ padding: 22 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 8 }}>필수 참석자</div>
+        <p className="t-body2">아직 참여자가 없어요.</p>
+      </div>
+    );
+  }
+
+  const requiredCount = participants.filter((p) => p.isRequired).length;
+
+  return (
+    <div className="card tight" style={{ padding: 22 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>필수 참석자</div>
+        {requiredCount > 0 && (
+          <span style={{ fontSize: 12, fontWeight: 700, color: "var(--color-accent)" }}>{requiredCount}명 지정됨</span>
+        )}
+      </div>
+      <p className="t-cap" style={{ marginBottom: 10, color: "var(--color-text-2)" }}>
+        필수 지정 시 해당 참여자가 가능한 시간 위주로 추천돼요.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {participants.map((p) => (
+          <div
+            key={p.participantId}
+            style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 12px", borderRadius: 10,
+              background: p.isRequired ? "var(--color-accent-soft, rgba(255,107,107,0.08))" : "var(--color-bg)",
+              border: p.isRequired ? "1px solid var(--color-accent)" : "1px solid var(--color-line)",
+              transition: "background 160ms, border-color 160ms",
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.015em", color: "var(--color-text)" }}>
+                {p.guestName}
+              </div>
+              <div className="t-cap" style={{ marginTop: 1 }}>
+                {p.hasResponded ? "응답 완료" : "미응답"}
+                {p.participantType === "MEMBER" && " · 회원"}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={toggling === p.participantId}
+              onClick={() => handleToggle(p)}
+              style={{
+                height: 28, padding: "0 10px",
+                borderRadius: 999, border: 0,
+                background: p.isRequired ? "var(--color-accent)" : "var(--color-line)",
+                color: p.isRequired ? "#fff" : "var(--color-text-2)",
+                fontFamily: "inherit", fontSize: 11, fontWeight: 700,
+                cursor: toggling === p.participantId ? "default" : "pointer",
+                opacity: toggling === p.participantId ? 0.5 : 1,
+                transition: "background 160ms, color 160ms",
+                whiteSpace: "nowrap" as const,
+              }}
+            >
+              {p.isRequired ? "필수 해제" : "필수 지정"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════
    추천 결과 탭
 ══════════════════════════════════════════════════════ */
-function RecommendationsTab({ recs, meetingId, onConfirmed }: {
+function RecommendationsTab({
+  recs,
+  meetingId,
+  onConfirmed,
+  onRecommendationsChanged,
+}: {
   recs: ApiRec[];
   meetingId: number;
   onConfirmed: () => void;
+  onRecommendationsChanged: () => void;
 }) {
   const [selected, setSelected] = useState(1);
   const [confirming, setConfirming] = useState(false);
@@ -518,8 +640,19 @@ function RecommendationsTab({ recs, meetingId, onConfirmed }: {
 
   if (recs.length === 0) {
     return (
-      <div style={{ padding: "48px 0", textAlign: "center" }}>
-        <p className="t-body2">아직 추천 결과가 없어요. 참여자 응답 후 자동으로 계산돼요.</p>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", gap: 24, alignItems: "start" }}>
+        <div className="card" style={{ padding: 48, textAlign: "center" }}>
+          <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 800, letterSpacing: "-0.03em" }}>
+            아직 추천 결과가 없어요
+          </h2>
+          <p className="t-body2">참여자 응답이 모이면 자동으로 계산돼요.</p>
+        </div>
+        <aside style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <RequiredParticipantsPanel
+            meetingId={meetingId}
+            onRecommendationsChanged={onRecommendationsChanged}
+          />
+        </aside>
       </div>
     );
   }
@@ -641,11 +774,10 @@ function RecommendationsTab({ recs, meetingId, onConfirmed }: {
           </Button>
         </div>
 
-        <div className="card tight" style={{ padding: 22, position: "relative", overflow: "hidden" }}>
-          <span style={{ position: "absolute", top: -20, right: -16, width: 70, height: 70, borderRadius: 999, background: "var(--color-lavender)", opacity: 0.5 }} aria-hidden="true" />
-          <div style={{ fontSize: 11, fontWeight: 800, color: "var(--color-text-muted)", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 10 }}>모임 정보</div>
-          <p className="t-cap" style={{ marginBottom: 14, color: "var(--color-text-2)" }}>가용 슬롯이 있어야 추천이 계산돼요.</p>
-        </div>
+        <RequiredParticipantsPanel
+          meetingId={meetingId}
+          onRecommendationsChanged={onRecommendationsChanged}
+        />
       </aside>
     </div>
   );
@@ -664,6 +796,12 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
   // null = 아직 로딩 중(빈 배열 = 슬롯 없음과 구분). aggError = fetch 실패.
   const [agg, setAgg] = useState<SlotAggregate[] | null>(null);
   const [aggError, setAggError] = useState(false);
+
+  const loadRecommendations = useCallback(() => {
+    getRecommendations(mid)
+      .then((res) => setRecs(res.recommendations))
+      .catch(() => {});
+  }, [mid]);
 
   // 조회만(상태 setter 는 .then/.catch 안 — effect 에서 동기 setState 회피).
   const fetchAggregate = useCallback(() => {
@@ -686,12 +824,10 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
       });
-    getRecommendations(mid)
-      .then((res) => setRecs(res.recommendations))
-      .catch(() => {});
+    loadRecommendations();
     // 초기값이 이미 null(로딩) 이라 reset 없이 조회만 — effect 내 동기 setState 회피.
     fetchAggregate();
-  }, [mid, router, fetchAggregate]);
+  }, [mid, router, fetchAggregate, loadRecommendations]);
 
   return (
     <div style={{ minHeight: "100dvh", background: "var(--color-bg)" }}>
@@ -713,7 +849,14 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
 
         {tab === "aggregate"
           ? <AggregateTab slots={agg} meeting={meeting} error={aggError} onRetry={loadAggregate} />
-          : <RecommendationsTab recs={recs} meetingId={mid} onConfirmed={() => setRecs([])} />}
+          : (
+              <RecommendationsTab
+                recs={recs}
+                meetingId={mid}
+                onConfirmed={() => setRecs([])}
+                onRecommendationsChanged={loadRecommendations}
+              />
+            )}
       </main>
     </div>
   );

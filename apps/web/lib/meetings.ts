@@ -8,6 +8,8 @@ import type {
   ConfirmResult,
   AggregateResponse,
   UpdateMeetingRequest,
+  ParticipantsResponse,
+  Participant,
 } from "@whenwe/types";
 import { authGet, authPost, authPatch, authDelete } from "./api";
 
@@ -44,4 +46,19 @@ export function deleteMeeting(meetingId: number): Promise<Record<string, never>>
 
 export function confirmMeeting(meetingId: number, recommendationId: number): Promise<ConfirmResult> {
   return authPost<ConfirmResult>(`/api/meetings/${meetingId}/confirm`, { recommendationId });
+}
+
+export function listParticipants(meetingId: number): Promise<ParticipantsResponse> {
+  return authGet<ParticipantsResponse>(`/api/meetings/${meetingId}/participants`);
+}
+
+export function setParticipantRequired(
+  meetingId: number,
+  participantId: number,
+  isRequired: boolean,
+): Promise<Participant> {
+  return authPatch<Participant>(
+    `/api/meetings/${meetingId}/participants/${participantId}`,
+    { isRequired },
+  );
 }

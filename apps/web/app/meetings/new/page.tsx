@@ -14,7 +14,6 @@ const STEPS = [
   { id: 2, label: "기간",       q: "언제 사이에서 고를까요?" },
   { id: 3, label: "소요 시간",  q: "얼마나 만날 예정인가요?" },
   { id: 4, label: "초대",       q: "초대 링크를 공유해요" },
-  { id: 5, label: "완료",       q: "응답을 기다리고 있어요" },
 ];
 
 function StepBar({ current }: { current: number }) {
@@ -189,15 +188,22 @@ export default function WizardPage() {
 
   const set = (patch: Partial<WizardData>) => setData((d) => ({ ...d, ...patch }));
 
+  const meetingHref = () => {
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+    return isMobile
+      ? `/meetings/${meetingId}/status`
+      : `/meetings/${meetingId}/dashboard`;
+  };
+
   const handleNext = async () => {
-    if (step !== 3) { setStep((s) => Math.min(s + 1, 5)); return; }
+    if (step !== 3) { setStep((s) => Math.min(s + 1, STEPS.length)); return; }
     if (meetingId !== null) { setStep(4); return; }  // 이미 생성된 경우 재사용
     setCreating(true);
     setCreateError(null);
     try {
       const tr = data.range === "custom"
         ? { s: data.customStart, e: data.customEnd }
-        : (RANGE_TIME[data.range] ?? RANGE_TIME["weekday-eve"]);
+        : (RANGE_TIME[data.range] ?? RANGE_TIME.evening);
       const useDates = data.useSpecificDates && data.selectedDates.length > 0;
       const res = await createMeeting({
         title: data.name,
@@ -226,6 +232,23 @@ export default function WizardPage() {
     if (inviteUrl) navigator.clipboard.writeText(inviteUrl).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShare = async () => {
+    if (!inviteUrl) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: data.name,
+          text: `${data.name} 가능 시간을 알려주세요.`,
+          url: inviteUrl,
+        });
+        return;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+      }
+    }
+    handleCopy();
   };
 
   return (
@@ -494,8 +517,8 @@ export default function WizardPage() {
                 </button>
               </div>
 
-              <Button block variant="secondary" leftIcon={<Share size={16} color="var(--color-primary)" />} onClick={() => {}}>
-                카카오톡으로 공유
+              <Button block variant="secondary" leftIcon={<Share size={16} color="var(--color-primary)" />} onClick={handleShare}>
+                {copied ? "링크 복사됨!" : "공유하기"}
               </Button>
 
               <div style={{
@@ -519,62 +542,7 @@ export default function WizardPage() {
             </div>
           </div>
           <div className="bottom-bar">
-            <Button block primary onClick={handleNext}>응답 대기로 이동</Button>
-          </div>
-        </>
-      )}
-
-      {/* Step 5 — Waiting */}
-      {step === 5 && (
-        <>
-          <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 20 }}>
-            <Section q={STEPS[4].q} helper="참여자가 응답을 제출하면 실시간으로 반영돼요.">
-              {/* Response progress */}
-              <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-line)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>응답 현황</div>
-                  <span className="pill ok">응답 수집 중</span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ flex: 1, height: 8, background: "var(--color-bg-2)", borderRadius: 999, overflow: "hidden" }}>
-                    <div style={{ width: "33%", height: "100%", background: "var(--color-primary)", borderRadius: 999 }} />
-                  </div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text-2)" }}>2/6명</span>
-                </div>
-                <div className="t-cap">마감까지 <b style={{ color: "var(--color-primary)" }}>5일 남았어요</b></div>
-              </div>
-
-              {/* Participant list */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {["소미", "지현"].map((name, i) => (
-                  <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--color-surface)", border: "1px solid var(--color-line)", borderRadius: 12 }}>
-                    <span style={{ width: 28, height: 28, borderRadius: 999, background: i === 0 ? "var(--color-primary)" : "var(--color-baby-blue)", color: i === 0 ? "#fff" : "#333", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>
-                      {name[0]}
-                    </span>
-                    <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{name}</span>
-                    <span className="pill ok" style={{ height: 22, fontSize: 11, padding: "0 8px" }}>응답 완료</span>
-                  </div>
-                ))}
-                {["민수", "유나", "태오", "하린"].map((name) => (
-                  <div key={name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--color-surface)", border: "1px solid var(--color-line)", borderRadius: 12 }}>
-                    <span style={{ width: 28, height: 28, borderRadius: 999, background: "var(--color-bg-2)", color: "var(--color-text-muted)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800 }}>
-                      {name[0]}
-                    </span>
-                    <span style={{ fontSize: 14, fontWeight: 600, flex: 1, color: "var(--color-text-muted)" }}>{name}</span>
-                    <span className="pill gray" style={{ height: 22, fontSize: 11, padding: "0 8px" }}>대기 중</span>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          </div>
-          <div className="bottom-bar">
-            <Button block primary onClick={() => {
-              const isMobile = window.innerWidth < 768;
-              router.push(isMobile
-                ? `/meetings/${meetingId}/status`
-                : `/meetings/${meetingId}/dashboard`
-              );
-            }}>
+            <Button block primary disabled={meetingId === null} onClick={() => router.push(meetingHref())}>
               {typeof window !== "undefined" && window.innerWidth < 768 ? "응답 현황 보기" : "대시보드로 이동"}
             </Button>
             <Button block variant="ghost" onClick={() => router.push("/meetings")}>

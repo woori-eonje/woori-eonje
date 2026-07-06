@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, use } from "react";
+import { useState, useMemo, useEffect, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar, Button } from "@/components/primitives";
 import { DateTab } from "@/components/time-select/DateTab";
@@ -47,38 +47,44 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     const p = loadParticipant(token);
     if (!p) {
       // 등록 안 한 브라우저면 초대 진입으로 되돌림
       router.replace(`/invite/${token}`);
       return;
     }
-    (async () => {
-      try {
-        const invite = toInviteVM(await fetchInvite(token));
-        const [dayGroups, myPicks] = await Promise.all([
-          fetchSlotWindows(invite.meetingId),
-          fetchMyPicks(invite.meetingId, p.editToken),
-        ]);
-        setParticipant(p);
-        setVm(invite);
-        setDays(dayGroups);
-        setActiveDate(dayGroups[0]?.dateKey ?? "");
-        setPicks(myPicks);
-      } catch (e) {
-        // 회원(JWT) 경로에서 토큰이 없거나 만료면 로그인으로 유도(authGet 은 request() 밖에서
-        // throw 라 자동 리다이렉트가 안 걸린다). 그 외는 일반 에러 + 재시도.
-        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
-          router.replace(`/login?redirect=${encodeURIComponent(`/invite/${token}/time-select`)}`);
-          return;
-        }
-        setError("시간 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
-      } finally {
-        setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const invite = toInviteVM(await fetchInvite(token));
+      const [dayGroups, myPicks] = await Promise.all([
+        fetchSlotWindows(invite.meetingId),
+        fetchMyPicks(invite.meetingId, p.editToken),
+      ]);
+      setParticipant(p);
+      setVm(invite);
+      setDays(dayGroups);
+      setActiveDate(dayGroups[0]?.dateKey ?? "");
+      setPicks(myPicks);
+    } catch (e) {
+      // 회원(JWT) 경로에서 토큰이 없거나 만료면 로그인으로 유도(authGet 은 request() 밖에서
+      // throw 라 자동 리다이렉트가 안 걸린다). 그 외는 일반 에러 + 재시도.
+      if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
+        router.replace(`/login?redirect=${encodeURIComponent(`/invite/${token}/time-select`)}`);
+        return;
       }
-    })();
+      setError("시간 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setLoading(false);
+    }
   }, [token, router]);
+
+  useEffect(() => {
+    // 초기 데이터 로드 함수는 재시도 버튼에서도 공유한다. 내부 setState 는 async fetch 결과 동기화용이다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
 
   // 선택 단위는 블록(window) — 블록 상태(uniform)별로 집계.
   const summary = useMemo(() => {
@@ -167,7 +173,7 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
           <p className="t-body2">{error ?? "시간 정보를 불러오지 못했어요."}</p>
           <button
             className="btn outline"
-            onClick={() => { setError(null); setLoading(true); router.refresh(); }}
+            onClick={() => { void load(); }}
           >
             다시 시도
           </button>

@@ -22,10 +22,29 @@ function InfoScreen({ title, body }: { title: string; body: string }) {
   );
 }
 
+const TZ = "Asia/Seoul";
+
+function fmtConfirmed(startIso: string, endIso: string): string {
+  const dateLabel = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: TZ, month: "long", day: "numeric", weekday: "short",
+  }).format(new Date(startIso));
+  const startTime = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(new Date(startIso));
+  const endTime = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true,
+  }).format(new Date(endIso));
+  return `${dateLabel} ${startTime} – ${endTime}`;
+}
+
 function ConfirmedScreen({ dto }: { dto: InvitePublic }) {
   const startD = new Date(dto.startDate);
   const endD = new Date(dto.endDate);
   const dateRange = `${startD.getMonth() + 1}.${startD.getDate()} — ${endD.getMonth() + 1}.${endD.getDate()}`;
+  const confirmedLabel =
+    dto.confirmedStartAt && dto.confirmedEndAt
+      ? fmtConfirmed(dto.confirmedStartAt, dto.confirmedEndAt)
+      : null;
 
   return (
     <div className="screen white">
@@ -63,16 +82,32 @@ function ConfirmedScreen({ dto }: { dto: InvitePublic }) {
           </div>
         </div>
 
-        <div style={{
-          background: "var(--color-primary-soft)", borderRadius: 14,
-          padding: "12px 16px", fontSize: 13, color: "var(--color-primary)", lineHeight: 1.6, fontWeight: 600,
-        }}>
-          🗓 확정된 시간 표시 준비 중이에요.
-          <br />
-          <span style={{ fontWeight: 400, color: "var(--color-text-2)" }}>
-            모임장에게 확정 시간을 확인하거나, 잠시 후 다시 접속해 주세요.
-          </span>
-        </div>
+        {confirmedLabel ? (
+          <div style={{
+            background: "var(--color-primary-soft)",
+            border: "1px solid var(--color-primary)",
+            borderRadius: 14, padding: "16px 18px",
+            display: "flex", flexDirection: "column", gap: 6,
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "var(--color-primary)", letterSpacing: "0.04em" }}>
+              확정된 시간
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: "var(--color-text)", letterSpacing: "-0.025em", lineHeight: 1.4 }}>
+              {confirmedLabel}
+            </div>
+          </div>
+        ) : (
+          <div style={{
+            background: "var(--color-primary-soft)", borderRadius: 14,
+            padding: "12px 16px", fontSize: 13, color: "var(--color-primary)", lineHeight: 1.6, fontWeight: 600,
+          }}>
+            🗓 확정된 시간 표시 준비 중이에요.
+            <br />
+            <span style={{ fontWeight: 400, color: "var(--color-text-2)" }}>
+              모임장에게 확정 시간을 확인하거나, 잠시 후 다시 접속해 주세요.
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
