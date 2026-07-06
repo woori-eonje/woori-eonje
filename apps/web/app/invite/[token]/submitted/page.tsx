@@ -21,10 +21,14 @@ export default function SubmittedPage({ params }: { params: Promise<{ token: str
   const [vm, setVm] = useState<InviteVM | null>(null);
   const [responseDeadline, setResponseDeadline] = useState<string | null>(null);
   const [picks, setPicks] = useState<Record<number, SlotState>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const p = loadParticipant(token);
-    if (!p) return;
+    if (!p) {
+      router.replace(`/invite/${token}`);
+      return;
+    }
     fetchInvite(token)
       .then(async (dto) => {
         setVm(toInviteVM(dto));
@@ -32,8 +36,10 @@ export default function SubmittedPage({ params }: { params: Promise<{ token: str
         const myPicks = await fetchMyPicks(dto.meetingId, p.editToken);
         setPicks(myPicks);
       })
-      .catch(() => {});
-  }, [token]);
+      .catch(() => {
+        setLoadError("응답 요약을 불러오지 못했어요.");
+      });
+  }, [token, router]);
 
   const summary = useMemo(() => {
     let ok = 0, m = 0, x = 0;
@@ -89,9 +95,11 @@ export default function SubmittedPage({ params }: { params: Promise<{ token: str
         }}>
           <div className="t-cap">내 응답 요약</div>
           <div className="t-body" style={{ fontWeight: 700 }}>
-            {hasData
-              ? `가능 ${summary.ok}개 · 애매 ${summary.m}개 · 불가 ${summary.x}개`
-              : "불러오는 중…"}
+            {loadError
+              ? loadError
+              : hasData
+                ? `가능 ${summary.ok}개 · 애매 ${summary.m}개 · 불가 ${summary.x}개`
+                : "불러오는 중…"}
           </div>
           {responseDeadline && (
             <div className="t-cap">
