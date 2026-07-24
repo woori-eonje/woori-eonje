@@ -9,12 +9,13 @@ const STATE_INFO: Record<SlotState, { tag: string; short: string }> = {
 };
 
 interface TimeSlotProps {
+  windowKey: string;
   time: string;
   state: SlotState | null;
   onTap: () => void;
 }
 
-export function TimeSlot({ time, state, onTap }: TimeSlotProps) {
+export function TimeSlot({ windowKey, time, state, onTap }: TimeSlotProps) {
   const cls = state === null ? "" :
     state === "available" ? "s-available" :
     state === "maybe" ? "s-maybe" : "s-unavail";
@@ -24,6 +25,7 @@ export function TimeSlot({ time, state, onTap }: TimeSlotProps) {
     <button
       type="button"
       className={`slot ${cls}`}
+      data-window-key={windowKey}
       onClick={onTap}
       aria-label={`${time} ${state ? STATE_INFO[state].short : "선택 안 함"}`}
     >

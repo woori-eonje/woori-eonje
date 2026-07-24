@@ -122,6 +122,7 @@
   --touch-min:  44px;
   --header-h:   56px;
   --mobile-padding: 20px;
+  --content-max-width: 480px;
 }
 
 * { box-sizing: border-box; }
@@ -161,6 +162,9 @@ h1, h2, h3, p {
 
 /* ── Layout helpers ── */
 .screen {
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
   background: var(--color-bg);
   min-height: 100dvh;
   display: flex;
