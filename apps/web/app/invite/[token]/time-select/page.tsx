@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, use, useCallback } from "react";
+import { useState, useMemo, useEffect, use, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar, Button } from "@/components/primitives";
 import { DateTab } from "@/components/time-select/DateTab";
@@ -17,6 +17,12 @@ import {
   type WindowDayGroup,
   type WindowItem,
 } from "@/lib/availability";
+
+const MODE_LABEL: Record<SlotState, string> = {
+  available: "가능",
+  maybe: "애매",
+  unavail: "불가",
+};
 
 // 한 블록(연속 슬롯 묶음)의 상태: 모든 슬롯이 같은 상태면 그 상태, 아니면 null(미선택/혼합).
 function windowState(
@@ -46,6 +52,15 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startKey: string;
+    visited: Set<string>;
+    dragging: boolean;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
 
   const load = useCallback(async () => {
     const p = loadParticipant(token);
@@ -110,6 +125,10 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
 
   // 블록 탭: 같은 상태면 해제(슬롯 제거), 아니면 블록의 모든 슬롯을 현재 모드로.
   const onTapWindow = (w: WindowItem) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     setPicks((prev) => {
       const next = { ...prev };
       if (windowState(w.slotIds, prev) === mode) {
@@ -121,7 +140,64 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
     });
   };
 
-  const onQuick = (kind: "reset" | "clear-day" | "weekday" | "weekend") => {
+  const paintWindow = useCallback((w: WindowItem) => {
+    setPicks((prev) => {
+      const next = { ...prev };
+      for (const id of w.slotIds) next[id] = mode;
+      return next;
+    });
+  }, [mode]);
+
+  const onDragStart = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const slot = (event.target as HTMLElement).closest<HTMLElement>("[data-window-key]");
+    const key = slot?.dataset.windowKey;
+    if (!key) return;
+
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startKey: key,
+      visited: new Set([key]),
+      dragging: false,
+    };
+  };
+
+  const onDragMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const moved = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+    if (!drag.dragging && moved < 8) return;
+
+    const slot = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>("[data-window-key]");
+    const key = slot?.dataset.windowKey;
+    if (!key) return;
+
+    if (!drag.dragging) {
+      drag.dragging = true;
+      const firstWindow = activeDay?.windows.find((w) => w.key === drag.startKey);
+      if (firstWindow) paintWindow(firstWindow);
+    }
+    if (drag.visited.has(key)) return;
+
+    const nextWindow = activeDay?.windows.find((w) => w.key === key);
+    if (!nextWindow) return;
+    drag.visited.add(key);
+    paintWindow(nextWindow);
+  };
+
+  const onDragEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    suppressClickRef.current = drag.dragging;
+    dragRef.current = null;
+  };
+
+  const onQuick = (kind: "reset" | "clear-day" | "fill-day" | "fill-all") => {
     setPicks((prev) => {
       if (kind === "reset") return {};
       const next = { ...prev };
@@ -129,10 +205,12 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
         activeDay?.windows.forEach((w) => w.slotIds.forEach((id) => delete next[id]));
         return next;
       }
-      const wantWeekend = kind === "weekend";
-      days
-        .filter((d) => d.weekend === wantWeekend)
-        .forEach((d) => d.windows.forEach((w) => w.slotIds.forEach((id) => (next[id] = mode))));
+      const targetDays = kind === "fill-day"
+        ? days.filter((d) => d.dateKey === activeDate)
+        : days;
+      targetDays.forEach((d) =>
+        d.windows.forEach((w) => w.slotIds.forEach((id) => (next[id] = mode))),
+      );
       return next;
     });
   };
@@ -245,31 +323,39 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
       ) : (
         <div className="scroll" style={{ padding: "16px 20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div className="t-cap">상태를 고른 뒤 시간 블록을 눌러주세요. (소요 {vm.durationLabel} 단위)</div>
+            <div className="t-cap">상태를 고른 뒤 누르거나 여러 시간을 쓸어 선택하세요. (소요 {vm.durationLabel} 단위)</div>
             <ModeToggle value={mode} onChange={setMode} />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekday")}>
-              평일 전체 선택
+            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("fill-day")}>
+              이 날짜 전체 {MODE_LABEL[mode]}
             </button>
-            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("weekend")}>
-              주말 전체 선택
+            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("fill-all")}>
+              모든 날짜 전체 {MODE_LABEL[mode]}
+            </button>
+            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("clear-day")}>
+              이 날짜 선택 지우기
             </button>
             <button className="chip danger" style={{ justifyContent: "center" }} onClick={() => onQuick("reset")}>
               전체 초기화
-            </button>
-            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("clear-day")}>
-              오늘 선택 지우기
             </button>
           </div>
 
           <div className="divider" />
 
-          <div className="slot-grid">
+          <div
+            className="slot-grid"
+            onPointerDown={onDragStart}
+            onPointerMove={onDragMove}
+            onPointerUp={onDragEnd}
+            onPointerCancel={onDragEnd}
+            style={{ touchAction: "pan-y" }}
+          >
             {activeDay?.windows.map((w) => (
               <TimeSlot
                 key={w.key}
+                windowKey={w.key}
                 time={w.label}
                 state={windowState(w.slotIds, picks)}
                 onTap={() => onTapWindow(w)}
