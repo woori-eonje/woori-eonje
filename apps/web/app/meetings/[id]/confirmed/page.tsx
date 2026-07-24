@@ -6,9 +6,9 @@ import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
 import { TopBar, Button, StatusPill } from "@/components/primitives";
 import { Calendar, Share } from "@/components/icons";
-import { getMeeting } from "@/lib/meetings";
+import { getMeeting, listParticipants } from "@/lib/meetings";
 import { ApiError, getToken } from "@/lib/api";
-import type { MeetingDetail } from "@whenwe/types";
+import type { MeetingDetail, ParticipantWithStatus } from "@whenwe/types";
 
 const TZ = "Asia/Seoul";
 
@@ -16,15 +16,21 @@ export default function ConfirmedPage({ params }: { params: Promise<{ id: string
   const { id } = use(params);
   const router = useRouter();
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
+  const [participants, setParticipants] = useState<ParticipantWithStatus[] | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
-    getMeeting(Number(id))
+    Promise.all([getMeeting(Number(id)), listParticipants(Number(id))])
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
       })
-      .then((m) => { if (m) setMeeting(m); });
+      .then((result) => {
+        if (!result) return;
+        const [meetingResult, participantsResult] = result;
+        setMeeting(meetingResult);
+        setParticipants(participantsResult.participants);
+      });
   }, [id, router]);
 
   const handleCalendar = async () => {
@@ -91,7 +97,33 @@ export default function ConfirmedPage({ params }: { params: Promise<{ id: string
           <div className="t-cap" style={{ color: "var(--color-text-2)", fontWeight: 800, textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>
             참여자 {meeting?.participantCount ?? "–"}명
           </div>
-          {!meeting && <div className="skeleton" style={{ height: 32, borderRadius: 8 }} />}
+          {!participants && <div className="skeleton" style={{ height: 32, borderRadius: 8 }} />}
+          {participants?.length === 0 && (
+            <div className="t-body2" style={{ color: "var(--color-text-2)" }}>아직 참여자가 없어요.</div>
+          )}
+          {participants && participants.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {participants.map((participant) => (
+                <span
+                  key={participant.participantId}
+                  className="t-body2"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "7px 10px",
+                    borderRadius: 999,
+                    background: "var(--color-primary-soft)",
+                    color: "var(--color-primary)",
+                    fontWeight: 700,
+                  }}
+                >
+                  {participant.guestName}
+                  {participant.isRequired && <span aria-label="필수 참여자">· 필수</span>}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Calendar row */}
