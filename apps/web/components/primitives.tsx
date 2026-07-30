@@ -95,7 +95,8 @@ export function Logo({ size = 36 }: { size?: number }) {
       src="/logo.svg"
       alt="우리 언제?"
       height={size}
-      width={size * 3.5}
+      width={size * (766 / 165)}
+      preload
       style={{ height: size, width: "auto", display: "block" }}
     />
   );

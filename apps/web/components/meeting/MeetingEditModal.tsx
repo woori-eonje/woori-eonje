@@ -51,7 +51,7 @@ export function MeetingEditModal({
   }, [saving, onClose]);
 
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const maxEnd = from ? new Date(from.getTime() + 13 * 86400000) : undefined;
+  const maxEnd = from ? new Date(from.getTime() + 29 * 86400000) : undefined;
   const maxDue = from ? new Date(from.getTime() - 86400000) : undefined;
   const valid = title.trim().length >= 2 && !!from && !!to && !!due;
 
@@ -133,7 +133,7 @@ export function MeetingEditModal({
           <DatePicker value={from} onChange={(d) => { setFrom(d); setTo(undefined); setDue(undefined); }} fromDate={today} placeholder="시작일" />
         ))}
         {field("후보 기간 종료", (
-          <DatePicker value={to} onChange={setTo} fromDate={from ? new Date(from.getTime() + 86400000) : today} toDate={maxEnd} disabled={!from} placeholder="종료일 (최대 14일)" />
+          <DatePicker value={to} onChange={setTo} fromDate={from ? new Date(from.getTime() + 86400000) : today} toDate={maxEnd} disabled={!from} placeholder="종료일 (최대 30일)" />
         ))}
         {field("선택 가능 시간대", (
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>

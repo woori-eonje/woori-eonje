@@ -7,16 +7,41 @@ import { Calendar, ChevronRight } from "@/components/icons";
 import { ApiError, getToken } from "@/lib/api";
 import { getMe } from "@/lib/auth";
 import type { InviteVM } from "@/lib/invite";
-import { registerParticipant, saveParticipant, loadParticipant } from "@/lib/participant";
+import {
+  registerParticipant,
+  restoreParticipantSession,
+  isValidGuestSession,
+  saveParticipant,
+  loadParticipant,
+} from "@/lib/participant";
+
+const GUEST_NAME_PATTERN = /^[가-힣A-Za-z0-9]+(?: [가-힣A-Za-z0-9]+)*$/;
 
 export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
   const router = useRouter();
+  const pinEnabled = process.env.NEXT_PUBLIC_PARTICIPANT_PIN_ENABLED === "true";
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showGuestForm, setShowGuestForm] = useState(false);
+  const [guestMode, setGuestMode] = useState<"register" | "restore">("register");
   const [name, setName] = useState("");
+  const [pin, setPin] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const valid = name.trim().length >= 2;
+  const normalizedName = name.trim().replace(/\s+/g, " ");
+  const guestNameValid =
+    normalizedName.length >= 2
+    && normalizedName.length <= 12
+    && GUEST_NAME_PATTERN.test(normalizedName);
+  const nameValid = isLoggedIn ? normalizedName.length > 0 : guestNameValid;
+  const pinValid = /^\d{4}$/.test(pin);
+  const valid =
+    nameValid
+    && (
+      isLoggedIn
+      || !pinEnabled
+      || (pinValid && (guestMode === "restore" || pin === pinConfirm))
+    );
 
   useEffect(() => {
     // 로그인 여부는 localStorage 토큰(클라이언트 전용)이라 렌더 중 읽으면 hydration
@@ -36,8 +61,20 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
     setSubmitting(true);
     setError(null);
     try {
-      // 로그인 상태면 Bearer 를 실어 회원(MEMBER)으로 연동. 회원은 editToken 이 null.
-      const res = await registerParticipant(token, name.trim(), isLoggedIn);
+      const res =
+        pinEnabled && !isLoggedIn && guestMode === "restore"
+          ? await restoreParticipantSession(token, normalizedName, pin)
+          : await registerParticipant(
+              token,
+              normalizedName,
+              isLoggedIn,
+              pinEnabled && !isLoggedIn ? pin : undefined,
+            );
+      if (pinEnabled && !isLoggedIn && !isValidGuestSession(res)) {
+        setError("응답 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+        setSubmitting(false);
+        return;
+      }
       saveParticipant(token, {
         participantId: res.participantId,
         editToken: res.participantEditToken,
@@ -50,9 +87,17 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
         router.push(`/login?redirect=${encodeURIComponent(`/invite/${token}`)}`);
         return;
       }
-      setError(
-        e instanceof ApiError ? e.message : "참여에 실패했어요. 잠시 후 다시 시도해 주세요.",
-      );
+      if (e instanceof ApiError && e.code === "PARTICIPANT_NICKNAME_TAKEN") {
+        setError("이미 사용 중인 닉네임이에요. 기존 응답을 불러오거나 다른 닉네임을 사용해 주세요.");
+      } else if (e instanceof ApiError && e.code === "INVALID_PARTICIPANT_CREDENTIALS") {
+        setError("닉네임 또는 참여 PIN을 확인해 주세요.");
+      } else if (e instanceof ApiError && e.code === "PARTICIPANT_LOGIN_RATE_LIMITED") {
+        setError("여러 번 입력이 틀렸어요. 잠시 후 다시 시도해 주세요.");
+      } else {
+        setError(
+          e instanceof ApiError ? e.message : "참여에 실패했어요. 잠시 후 다시 시도해 주세요.",
+        );
+      }
       setSubmitting(false);
     }
   };
@@ -128,17 +173,118 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
               onKeyDown={(e) => e.key === "Enter" && handleStart()}
               autoFocus={!isLoggedIn}
             />
-            <div className="t-cap">2–12자 · 한글·영문·숫자</div>
-            {error && (
-              <div className="t-cap" style={{ color: "var(--color-error)", fontWeight: 600 }}>
-                {error}
-              </div>
-            )}
+            <div
+              className="t-cap"
+              style={{
+                color: name.length > 0 && !guestNameValid
+                  ? "var(--color-error)"
+                  : "var(--color-text-2)",
+              }}
+            >
+              2–12자 · 한글·영문·숫자·띄어쓰기
+            </div>
           </div>
+
+          {pinEnabled && !isLoggedIn && (
+            <>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label htmlFor="participant-pin" style={{ fontSize: 13, fontWeight: 700 }}>
+                  참여 PIN <span style={{ color: "var(--color-accent)", fontWeight: 800 }}>*</span>
+                </label>
+                <input
+                  id="participant-pin"
+                  className="input"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="숫자 4자리"
+                  value={pin}
+                  onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                  maxLength={4}
+                  aria-describedby="participant-pin-help"
+                />
+                <div id="participant-pin-help" className="t-cap">
+                  다른 기기에서 기존 응답을 불러올 때 사용해요.
+                </div>
+              </div>
+
+              {guestMode === "register" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <label htmlFor="participant-pin-confirm" style={{ fontSize: 13, fontWeight: 700 }}>
+                    참여 PIN 확인
+                  </label>
+                  <input
+                    id="participant-pin-confirm"
+                    className="input"
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    placeholder="한 번 더 입력해 주세요"
+                    value={pinConfirm}
+                    onChange={(event) => setPinConfirm(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                    onKeyDown={(event) => event.key === "Enter" && handleStart()}
+                    maxLength={4}
+                  />
+                  {pinConfirm.length === 4 && pin !== pinConfirm && (
+                    <div className="t-cap" style={{ color: "var(--color-error)", fontWeight: 600 }}>
+                      참여 PIN이 서로 달라요.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setGuestMode((current) => current === "register" ? "restore" : "register");
+                  setPin("");
+                  setPinConfirm("");
+                  setError(null);
+                }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--color-primary)",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  padding: 0,
+                  textAlign: "center",
+                }}
+              >
+                {guestMode === "register"
+                  ? "이미 참여했나요? 기존 응답 불러오기"
+                  : "처음 참여하시나요? 새로 참여하기"}
+              </button>
+            </>
+          )}
+
+          {error && (
+            <div
+              role="alert"
+              className="t-cap"
+              style={{
+                padding: "10px 12px",
+                borderRadius: 10,
+                background: "var(--color-error-soft)",
+                color: "var(--color-error)",
+                fontWeight: 600,
+              }}
+            >
+              {error}
+            </div>
+          )}
 
           {!isLoggedIn && (
             <button
-              onClick={() => setShowGuestForm(false)}
+              onClick={() => {
+                setShowGuestForm(false);
+                setGuestMode("register");
+                setPin("");
+                setPinConfirm("");
+                setError(null);
+              }}
               style={{
                 background: "transparent", border: "none",
                 color: "var(--color-text-muted)", fontFamily: "inherit",
@@ -152,7 +298,9 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
 
         <div className="bottom-bar">
           <Button block primary onClick={handleStart} disabled={!valid || submitting}>
-            {submitting ? "참여 중..." : "참여 시작"}
+            {submitting
+              ? (guestMode === "restore" ? "불러오는 중..." : "참여 중...")
+              : (guestMode === "restore" ? "기존 응답 불러오기" : "참여 시작")}
           </Button>
         </div>
       </div>
@@ -199,7 +347,10 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
 
           {/* 비회원 */}
           <button
-            onClick={() => setShowGuestForm(true)}
+            onClick={() => {
+              setGuestMode("register");
+              setShowGuestForm(true);
+            }}
             style={{
               width: "100%", textAlign: "left",
               background: "var(--color-surface)",
@@ -214,7 +365,7 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
                 비회원으로 입장
               </div>
               <div className="t-cap" style={{ marginTop: 3 }}>
-                닉네임만 입력하면 바로 참여
+                {pinEnabled ? "닉네임과 참여 PIN으로 참여" : "닉네임만 입력하면 바로 참여"}
               </div>
             </div>
             <ChevronRight size={18} color="var(--color-text-muted)" />

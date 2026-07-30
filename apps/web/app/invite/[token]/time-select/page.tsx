@@ -117,18 +117,22 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
 
   const activeDay = days.find((d) => d.dateKey === activeDate);
 
-  const dayCount = (dateKey: string) => {
+  const dayCounts = (dateKey: string) => {
     const d = days.find((g) => g.dateKey === dateKey);
-    if (!d) return 0;
-    return d.windows.filter((w) => windowState(w.slotIds, picks) !== null).length;
+    const counts = { available: 0, maybe: 0, unavailable: 0 };
+    if (!d) return counts;
+    for (const window of d.windows) {
+      const state = windowState(window.slotIds, picks);
+      if (state === "available") counts.available++;
+      else if (state === "maybe") counts.maybe++;
+      else if (state === "unavail") counts.unavailable++;
+    }
+    return counts;
   };
 
   // 블록 탭: 같은 상태면 해제(슬롯 제거), 아니면 블록의 모든 슬롯을 현재 모드로.
   const onTapWindow = (w: WindowItem) => {
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false;
-      return;
-    }
+    if (suppressClickRef.current) return;
     setPicks((prev) => {
       const next = { ...prev };
       if (windowState(w.slotIds, prev) === mode) {
@@ -154,6 +158,7 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
     const key = slot?.dataset.windowKey;
     if (!key) return;
 
+    event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -193,7 +198,27 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
   const onDragEnd = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
-    suppressClickRef.current = drag.dragging;
+    if (drag.dragging) {
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    }
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const onLostPointerCapture = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (drag.dragging) {
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    }
     dragRef.current = null;
   };
 
@@ -302,7 +327,7 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
               key={d.dateKey}
               label={d.label} weekday={d.weekday}
               active={activeDate === d.dateKey}
-              count={dayCount(d.dateKey)}
+              counts={dayCounts(d.dateKey)}
               onClick={() => setActiveDate(d.dateKey)}
             />
           ))}
@@ -350,6 +375,8 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
             onPointerMove={onDragMove}
             onPointerUp={onDragEnd}
             onPointerCancel={onDragEnd}
+            onLostPointerCapture={onLostPointerCapture}
+            onDragStart={(event) => event.preventDefault()}
             style={{ touchAction: "pan-y" }}
           >
             {activeDay?.windows.map((w) => (

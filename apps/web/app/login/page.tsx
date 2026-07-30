@@ -110,9 +110,25 @@ function LoginForm() {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <label style={{ fontSize: 13, fontWeight: 700 }}>비밀번호</label>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <label style={{ fontSize: 13, fontWeight: 700 }}>비밀번호</label>
+              {!isSignup && (
+                <Link
+                  href="/forgot-password"
+                  style={{
+                    color: "var(--color-primary)",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                  }}
+                >
+                  비밀번호를 잊으셨나요?
+                </Link>
+              )}
+            </div>
             <input
               className="input" type="password" placeholder="8자 이상"
+              autoComplete={isSignup ? "new-password" : "current-password"}
               value={password} onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />

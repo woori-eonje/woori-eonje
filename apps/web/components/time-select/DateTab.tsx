@@ -4,14 +4,30 @@ interface DateTabProps {
   active: boolean;
   label: string;
   weekday: string;
-  count: number;
+  counts: {
+    available: number;
+    maybe: number;
+    unavailable: number;
+  };
   onClick: () => void;
 }
 
-export function DateTab({ active, label, weekday, count, onClick }: DateTabProps) {
+const COUNT_ITEMS = [
+  { key: "available", label: "가능", color: "var(--color-primary)" },
+  { key: "maybe", label: "애매", color: "var(--color-maybe)" },
+  { key: "unavailable", label: "불가", color: "var(--color-text-muted)" },
+] as const;
+
+export function DateTab({ active, label, weekday, counts, onClick }: DateTabProps) {
+  const countLabel = COUNT_ITEMS
+    .filter(({ key }) => counts[key] > 0)
+    .map(({ key, label: stateLabel }) => `${stateLabel} ${counts[key]}개`)
+    .join(", ");
+
   return (
     <button
       onClick={onClick}
+      aria-label={`${weekday} ${label}${countLabel ? `, ${countLabel}` : ", 선택 없음"}`}
       style={{
         flex: "none", minWidth: 64,
         padding: "10px 12px",
@@ -28,9 +44,35 @@ export function DateTab({ active, label, weekday, count, onClick }: DateTabProps
     >
       <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.7 }}>{weekday}</div>
       <div style={{ fontSize: 17, fontWeight: 800, marginTop: 2 }}>{label}</div>
-      {count > 0 && (
-        <div style={{ fontSize: 10, fontWeight: 700, marginTop: 4, color: "var(--color-primary)" }}>
-          ● {count}
+      {countLabel && (
+        <div
+          aria-hidden="true"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 5,
+            minHeight: 15,
+            marginTop: 4,
+          }}
+        >
+          {COUNT_ITEMS.filter(({ key }) => counts[key] > 0).map(({ key, color }) => (
+            <span
+              key={key}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 2,
+                color,
+                fontSize: 9,
+                fontWeight: 800,
+                lineHeight: 1,
+              }}
+            >
+              <span style={{ fontSize: 7 }}>●</span>
+              {counts[key]}
+            </span>
+          ))}
         </div>
       )}
     </button>
