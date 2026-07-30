@@ -215,7 +215,7 @@ export default function WizardPage() {
         availableEndTime: tr.e,
         durationHours: DURATION_H[data.duration] ?? 2,
         responseDeadline: toDeadlineISO(data.due!),
-        // 특정 날짜 모드면 선택한 날짜만 슬롯 생성(범위는 그대로 14일 상한·마감 기준).
+        // 특정 날짜 모드면 선택한 날짜만 슬롯 생성(범위는 그대로 30일 상한·마감 기준).
         ...(useDates ? { dates: data.selectedDates } : {}),
       });
       setInviteUrl(res.inviteUrl);
@@ -308,7 +308,7 @@ export default function WizardPage() {
             {(() => {
               const today = new Date();
               today.setHours(0, 0, 0, 0);
-              const maxEnd = data.from ? new Date(data.from.getTime() + 13 * 86400000) : undefined;
+              const maxEnd = data.from ? new Date(data.from.getTime() + 29 * 86400000) : undefined;
               const maxDue = data.from ? new Date(data.from.getTime() - 86400000) : undefined;
               return (
                 <>
@@ -335,7 +335,7 @@ export default function WizardPage() {
                       toDate={maxEnd}
                       disabled={!data.from}
                     />
-                    {data.from && <div className="t-cap">최대 14일 ({data.from.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })} ~ {maxEnd?.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })})</div>}
+                    {data.from && <div className="t-cap">최대 30일 ({data.from.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })} ~ {maxEnd?.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })})</div>}
                   </div>
 
                   {/* 특정 날짜만 고르기 (선택) — 범위 안에서 후보 날짜를 직접 고름 */}
