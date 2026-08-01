@@ -1,4 +1,9 @@
-import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash, hashSync } from 'bcryptjs';
 import { randomBytes, createHash } from 'crypto';
@@ -39,6 +44,8 @@ function generateResetToken(): { rawToken: string; tokenHash: string } {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -175,7 +182,15 @@ export class AuthService {
 
     const webBaseUrl = process.env.WEB_BASE_URL ?? 'http://localhost:3000';
     const resetUrl = `${webBaseUrl}/reset-password?token=${rawToken}`;
-    await this.mailService.sendPasswordResetEmail(normalizedEmail, resetUrl);
+    try {
+      await this.mailService.sendPasswordResetEmail(normalizedEmail, resetUrl);
+    } catch (e) {
+      // 메일 발송 실패해도 응답은 항상 동일해야 함(계정 존재 여부 노출 방지) — 로그만 남기고 삼킨다.
+      this.logger.error(
+        '비밀번호 재설정 메일 발송 실패',
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
 
     return {};
   }

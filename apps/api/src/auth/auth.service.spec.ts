@@ -166,6 +166,32 @@ describe('AuthService.forgotPassword', () => {
     expect(sent).toHaveLength(1);
   });
 
+  it('메일 발송이 실패해도 예외를 던지지 않고 동일한 성공 응답을 반환한다', async () => {
+    const { prisma, tokens } = makeFakePrisma([
+      {
+        id: 1,
+        email: 'a@test.com',
+        password: 'hash',
+        nickname: '민수',
+        passwordChangedAt: null,
+      },
+    ]);
+    const mailService = {
+      sendPasswordResetEmail: () =>
+        Promise.reject(new Error('Resend API 오류')),
+    };
+    const service = new AuthService(
+      prisma,
+      {} as never,
+      mailService as unknown as MailService,
+    );
+
+    const result = await service.forgotPassword('a@test.com');
+
+    expect(result).toEqual({});
+    expect(tokens).toHaveLength(1);
+  });
+
   it('새 토큰 발급 시 기존 미사용 토큰을 무효화한다', async () => {
     const { prisma, tokens } = makeFakePrisma(
       [
