@@ -152,7 +152,9 @@ export class AuthService {
       latestToken &&
       Date.now() - latestToken.createdAt.getTime() < PASSWORD_RESET_COOLDOWN_MS
     ) {
-      // 쿨다운 이내 반복 요청 — 조용히 무시(동일 응답 유지, 메일 재발송 안 함).
+      // 쿨다운 이내 반복 요청 — 조용히 무시. 존재하지 않는 이메일 경로와 응답 시간을
+      // 맞춰(둘 다 sleep), 캐시/쿨다운 여부로 계정 존재가 타이밍으로 드러나지 않게 한다.
+      await sleep(NONEXISTENT_EMAIL_DELAY_MS);
       return {};
     }
 
