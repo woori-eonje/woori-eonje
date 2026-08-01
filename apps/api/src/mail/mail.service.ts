@@ -18,11 +18,16 @@ export class MailService {
   }
 
   async sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
-    await this.resend.emails.send({
+    const { error } = await this.resend.emails.send({
       from: this.from,
       to,
       subject: '[우리 언제?] 비밀번호 재설정',
       html: `<p>아래 링크를 눌러 비밀번호를 재설정하세요. 이 링크는 30분간 유효하며 한 번만 사용할 수 있습니다.</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
     });
+    // resend SDK는 API 레벨 실패(잘못된 수신자, API 키 문제, rate limit 등) 시에도
+    // reject하지 않고 { data: null, error } 로 resolve하므로 직접 예외로 전환해야 한다.
+    if (error) {
+      throw new Error(`비밀번호 재설정 메일 발송 실패: ${error.message}`);
+    }
   }
 }

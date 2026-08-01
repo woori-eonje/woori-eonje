@@ -42,4 +42,26 @@ describe('MailService.sendPasswordResetEmail', () => {
     delete process.env.RESEND_API_KEY;
     expect(() => new MailService()).toThrow('RESEND_API_KEY');
   });
+
+  it('Resend가 error를 반환하면 예외를 던진다', async () => {
+    const service = new MailService();
+    const send = jest.fn().mockResolvedValue({
+      data: null,
+      error: {
+        message: 'Invalid `to` field',
+        statusCode: 422,
+        name: 'validation_error',
+      },
+    });
+    (
+      service as unknown as { resend: { emails: { send: typeof send } } }
+    ).resend = { emails: { send } };
+
+    await expect(
+      service.sendPasswordResetEmail(
+        'user@example.com',
+        'https://woori-eonje.app/reset-password?token=abc',
+      ),
+    ).rejects.toThrow('Invalid `to` field');
+  });
 });
