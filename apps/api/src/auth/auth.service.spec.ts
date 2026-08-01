@@ -207,3 +207,124 @@ describe('AuthService.forgotPassword', () => {
     expect(tokens).toHaveLength(2);
   });
 });
+
+describe('AuthService.resetPassword', () => {
+  it('유효한 토큰이면 비밀번호를 변경하고 토큰을 사용 처리한다', async () => {
+    const rawToken = 'valid-raw-token';
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const { prisma, users, tokens } = makeFakePrisma(
+      [
+        {
+          id: 1,
+          email: 'a@test.com',
+          password: 'old-hash',
+          nickname: '민수',
+          passwordChangedAt: null,
+        },
+      ],
+      [
+        {
+          id: 1,
+          userId: 1,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+          usedAt: null,
+          createdAt: new Date(),
+        },
+      ],
+    );
+    const { mailService } = makeFakeMail();
+    const service = new AuthService(prisma, {} as never, mailService);
+
+    const result = await service.resetPassword(rawToken, 'newPassword123');
+
+    expect(result).toEqual({});
+    expect(users[0].password).not.toBe('old-hash');
+    expect(users[0].passwordChangedAt).not.toBeNull();
+    expect(tokens[0].usedAt).not.toBeNull();
+  });
+
+  it('존재하지 않는 토큰이면 PASSWORD_RESET_TOKEN_INVALID 를 던진다', async () => {
+    const { prisma } = makeFakePrisma([]);
+    const { mailService } = makeFakeMail();
+    const service = new AuthService(prisma, {} as never, mailService);
+
+    await expect(
+      service.resetPassword('nope', 'newPassword123'),
+    ).rejects.toMatchObject({ code: 'PASSWORD_RESET_TOKEN_INVALID' });
+  });
+
+  it('만료된 토큰이면 거부한다', async () => {
+    const rawToken = 'expired-token';
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const { prisma } = makeFakePrisma(
+      [
+        {
+          id: 1,
+          email: 'a@test.com',
+          password: 'old-hash',
+          nickname: '민수',
+          passwordChangedAt: null,
+        },
+      ],
+      [
+        {
+          id: 1,
+          userId: 1,
+          tokenHash,
+          expiresAt: new Date(Date.now() - 1000),
+          usedAt: null,
+          createdAt: new Date(Date.now() - 60000),
+        },
+      ],
+    );
+    const { mailService } = makeFakeMail();
+    const service = new AuthService(prisma, {} as never, mailService);
+
+    await expect(
+      service.resetPassword(rawToken, 'newPassword123'),
+    ).rejects.toMatchObject({ code: 'PASSWORD_RESET_TOKEN_INVALID' });
+  });
+
+  it('이미 사용된 토큰이면 거부한다', async () => {
+    const rawToken = 'used-token';
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const { prisma } = makeFakePrisma(
+      [
+        {
+          id: 1,
+          email: 'a@test.com',
+          password: 'old-hash',
+          nickname: '민수',
+          passwordChangedAt: null,
+        },
+      ],
+      [
+        {
+          id: 1,
+          userId: 1,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+          usedAt: new Date(),
+          createdAt: new Date(),
+        },
+      ],
+    );
+    const { mailService } = makeFakeMail();
+    const service = new AuthService(prisma, {} as never, mailService);
+
+    await expect(
+      service.resetPassword(rawToken, 'newPassword123'),
+    ).rejects.toMatchObject({ code: 'PASSWORD_RESET_TOKEN_INVALID' });
+  });
+
+  it('8자 미만 비밀번호는 거부한다', async () => {
+    const { prisma } = makeFakePrisma([]);
+    const { mailService } = makeFakeMail();
+    const service = new AuthService(prisma, {} as never, mailService);
+
+    await expect(service.resetPassword('any-token', 'short')).rejects.toThrow(
+      '비밀번호는 8~72자여야 합니다.',
+    );
+  });
+});

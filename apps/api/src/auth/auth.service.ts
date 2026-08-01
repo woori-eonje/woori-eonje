@@ -180,6 +180,46 @@ export class AuthService {
     return {};
   }
 
+  async resetPassword(
+    token: string | undefined,
+    newPassword: string | undefined,
+  ): Promise<Record<string, never>> {
+    if (!token || typeof newPassword !== 'string') {
+      throw this.passwordResetTokenInvalid();
+    }
+    if (newPassword.length < 8 || newPassword.length > 72) {
+      throw new BadRequestException('비밀번호는 8~72자여야 합니다.');
+    }
+
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (
+      !resetToken ||
+      resetToken.usedAt !== null ||
+      resetToken.expiresAt.getTime() < Date.now()
+    ) {
+      throw this.passwordResetTokenInvalid();
+    }
+
+    const passwordHash = await hash(newPassword, BCRYPT_ROUNDS);
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: resetToken.userId },
+        data: { password: passwordHash, passwordChangedAt: now },
+      });
+      await tx.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: now },
+      });
+    });
+
+    return {};
+  }
+
   private invalidCredentials(): DomainException {
     return new DomainException(
       ErrorCode.INVALID_CREDENTIALS,
@@ -193,6 +233,14 @@ export class AuthService {
       ErrorCode.EMAIL_ALREADY_EXISTS,
       HttpStatus.CONFLICT,
       '이미 사용 중인 이메일입니다.',
+    );
+  }
+
+  private passwordResetTokenInvalid(): DomainException {
+    return new DomainException(
+      ErrorCode.PASSWORD_RESET_TOKEN_INVALID,
+      HttpStatus.BAD_REQUEST,
+      '유효하지 않거나 만료된 링크입니다.',
     );
   }
 
