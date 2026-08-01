@@ -207,12 +207,22 @@ export class AuthService {
     const passwordHash = await hash(newPassword, BCRYPT_ROUNDS);
     const now = new Date();
     await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.passwordResetToken.updateMany({
+        where: { id: resetToken.id, usedAt: null },
+        data: { usedAt: now },
+      });
+      if (count === 0) {
+        // 동시 요청 경합으로 다른 요청이 먼저 이 토큰을 사용 처리함 — 트랜잭션 중단.
+        throw this.passwordResetTokenInvalid();
+      }
       await tx.user.update({
         where: { id: resetToken.userId },
         data: { password: passwordHash, passwordChangedAt: now },
       });
-      await tx.passwordResetToken.update({
-        where: { id: resetToken.id },
+      // 재설정 성공 시 같은 유저의 다른 미사용 토큰도 모두 무효화 (동시 forgotPassword 요청 등으로
+      // 두 번째 유효 토큰이 남아있을 가능성 방지).
+      await tx.passwordResetToken.updateMany({
+        where: { userId: resetToken.userId, usedAt: null },
         data: { usedAt: now },
       });
     });

@@ -29,15 +29,16 @@ function makeFakePrisma(users: FakeUser[], tokens: FakeResetToken[] = []) {
         where,
         data,
       }: {
-        where: { userId: number; usedAt: null };
+        where: { id?: number; userId?: number; usedAt: null };
         data: { usedAt: Date };
       }) => {
         let count = 0;
         for (const t of tokens) {
-          if (t.userId === where.userId && t.usedAt === null) {
-            t.usedAt = data.usedAt;
-            count += 1;
-          }
+          if (where.id !== undefined && t.id !== where.id) continue;
+          if (where.userId !== undefined && t.userId !== where.userId) continue;
+          if (t.usedAt !== where.usedAt) continue;
+          t.usedAt = data.usedAt;
+          count += 1;
         }
         return Promise.resolve({ count });
       },
@@ -56,17 +57,6 @@ function makeFakePrisma(users: FakeUser[], tokens: FakeResetToken[] = []) {
         };
         tokens.push(created);
         return Promise.resolve(created);
-      },
-      update: ({
-        where,
-        data,
-      }: {
-        where: { id: number };
-        data: { usedAt: Date };
-      }) => {
-        const t = tokens.find((x) => x.id === where.id)!;
-        t.usedAt = data.usedAt;
-        return Promise.resolve(t);
       },
     },
     user: {
@@ -326,5 +316,116 @@ describe('AuthService.resetPassword', () => {
     await expect(service.resetPassword('any-token', 'short')).rejects.toThrow(
       '비밀번호는 8~72자여야 합니다.',
     );
+  });
+
+  it('사전 조회 이후 트랜잭션 전에 다른 요청이 먼저 토큰을 사용 처리하면(경합) 거부한다', async () => {
+    // 사전 조회(findUnique) 직후 스냅샷은 usedAt: null 이라 최초 가드는 통과하지만,
+    // 트랜잭션의 조건부 updateMany 시점에는 실제 토큰이 이미 사용 처리되어 있어
+    // count: 0 으로 거부되어야 한다(TOCTOU 경합 방지 검증).
+    const rawToken = 'race-token';
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const token: FakeResetToken = {
+      id: 1,
+      userId: 1,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60000),
+      usedAt: null,
+      createdAt: new Date(),
+    };
+
+    const prisma = {
+      passwordResetToken: {
+        findUnique: () => {
+          const snapshot = { ...token };
+          // 조회 직후, 다른 요청이 먼저 이 토큰을 사용 처리했다고 가정.
+          token.usedAt = new Date();
+          return Promise.resolve(snapshot);
+        },
+      },
+      $transaction: (
+        fn: (tx: {
+          passwordResetToken: {
+            updateMany: (args: {
+              where: { id?: number; userId?: number; usedAt: null };
+              data: { usedAt: Date };
+            }) => Promise<{ count: number }>;
+          };
+          user: { update: (args: unknown) => Promise<unknown> };
+        }) => unknown,
+      ) =>
+        Promise.resolve(
+          fn({
+            passwordResetToken: {
+              updateMany: ({ where, data }) => {
+                if (
+                  (where.id === undefined || where.id === token.id) &&
+                  (where.userId === undefined ||
+                    where.userId === token.userId) &&
+                  token.usedAt === where.usedAt
+                ) {
+                  token.usedAt = data.usedAt;
+                  return Promise.resolve({ count: 1 });
+                }
+                return Promise.resolve({ count: 0 });
+              },
+            },
+            user: { update: () => Promise.resolve(undefined) },
+          }),
+        ),
+    };
+    const { mailService } = makeFakeMail();
+    const service = new AuthService(
+      prisma as unknown as PrismaService,
+      {} as never,
+      mailService,
+    );
+
+    await expect(
+      service.resetPassword(rawToken, 'newPassword123'),
+    ).rejects.toMatchObject({ code: 'PASSWORD_RESET_TOKEN_INVALID' });
+  });
+
+  it('재설정 성공 시 같은 사용자의 다른 미사용 토큰도 모두 무효화한다', async () => {
+    const rawToken = 'primary-token';
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const otherTokenHash = createHash('sha256')
+      .update('other-token')
+      .digest('hex');
+    const { prisma, tokens } = makeFakePrisma(
+      [
+        {
+          id: 1,
+          email: 'a@test.com',
+          password: 'old-hash',
+          nickname: '민수',
+          passwordChangedAt: null,
+        },
+      ],
+      [
+        {
+          id: 1,
+          userId: 1,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+          usedAt: null,
+          createdAt: new Date(),
+        },
+        {
+          id: 2,
+          userId: 1,
+          tokenHash: otherTokenHash,
+          expiresAt: new Date(Date.now() + 60000),
+          usedAt: null,
+          createdAt: new Date(),
+        },
+      ],
+    );
+    const { mailService } = makeFakeMail();
+    const service = new AuthService(prisma, {} as never, mailService);
+
+    await service.resetPassword(rawToken, 'newPassword123');
+
+    expect(tokens[0].usedAt).not.toBeNull();
+    expect(tokens[1].usedAt).not.toBeNull();
   });
 });
