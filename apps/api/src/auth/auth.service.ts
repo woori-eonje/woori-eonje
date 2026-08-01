@@ -1,6 +1,7 @@
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash, hashSync } from 'bcryptjs';
+import { randomBytes, createHash } from 'crypto';
 import {
   ErrorCode,
   type AuthUser,
@@ -10,6 +11,7 @@ import {
 } from '@whenwe/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { DomainException } from '../common/domain-exception';
+import { MailService } from '../mail/mail.service';
 import type { JwtPayload } from './jwt-auth.guard';
 
 // bcrypt cost. 평문 비밀번호는 해시 저장만 하고 어떤 응답/로그에도 노출하지 않는다.
@@ -19,12 +21,28 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // 로그인 시 사용자가 없어도 더미 해시로 compare 를 1회 수행해 응답 시간을 평탄화한다
 // (존재 이메일은 bcrypt 비교 비용, 없는 이메일은 즉시 반환되는 타이밍 차로 계정을 열거하는 것 방지).
 const DUMMY_PASSWORD_HASH = hashSync('whenwe-timing-equalizer', BCRYPT_ROUNDS);
+const PASSWORD_RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30분
+const PASSWORD_RESET_COOLDOWN_MS = 60 * 1000; // 60초
+// 존재하지 않는 이메일 처리 시간을 실제 발송(네트워크 호출 포함)과 비슷하게
+// 맞춰, 응답 시간 차이로 계정 존재 여부가 드러나지 않게 한다.
+const NONEXISTENT_EMAIL_DELAY_MS = 300;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function generateResetToken(): { rawToken: string; tokenHash: string } {
+  const rawToken = randomBytes(32).toString('hex');
+  const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+  return { rawToken, tokenHash };
+}
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
 
   async signup(body: SignupRequest): Promise<AuthUser> {
@@ -107,6 +125,57 @@ export class AuthService {
       );
     }
     return user;
+  }
+
+  async forgotPassword(
+    email: string | undefined,
+  ): Promise<Record<string, never>> {
+    const normalizedEmail = email?.trim().toLowerCase();
+    if (!normalizedEmail || !EMAIL_REGEX.test(normalizedEmail)) {
+      throw new BadRequestException('이메일 형식이 올바르지 않습니다.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      await sleep(NONEXISTENT_EMAIL_DELAY_MS);
+      return {};
+    }
+
+    const latestToken = await this.prisma.passwordResetToken.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (
+      latestToken &&
+      Date.now() - latestToken.createdAt.getTime() < PASSWORD_RESET_COOLDOWN_MS
+    ) {
+      // 쿨다운 이내 반복 요청 — 조용히 무시(동일 응답 유지, 메일 재발송 안 함).
+      return {};
+    }
+
+    const { rawToken, tokenHash } = generateResetToken();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      await tx.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt: new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS),
+        },
+      });
+    });
+
+    const webBaseUrl = process.env.WEB_BASE_URL ?? 'http://localhost:3000';
+    const resetUrl = `${webBaseUrl}/reset-password?token=${rawToken}`;
+    await this.mailService.sendPasswordResetEmail(normalizedEmail, resetUrl);
+
+    return {};
   }
 
   private invalidCredentials(): DomainException {
