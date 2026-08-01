@@ -61,10 +61,15 @@ export class JwtAuthGuard implements CanActivate {
     if (!user) {
       throw this.unauthenticated();
     }
+    // iat 는 초 단위로 내림된 값이라 passwordChangedAt(밀리초 정밀도)과 그대로
+    // 비교하면 같은 초 안에서 발급된 최신 토큰이 잘못 거부될 수 있다.
+    // passwordChangedAt 도 초 단위로 내림해, 최대 1초의 구 토큰 유효기간을
+    // 감수하고 같은 초 오탈락을 없앤다.
     if (
       user.passwordChangedAt &&
       payload.iat !== undefined &&
-      payload.iat * 1000 < user.passwordChangedAt.getTime()
+      payload.iat * 1000 <
+        Math.floor(user.passwordChangedAt.getTime() / 1000) * 1000
     ) {
       throw this.unauthenticated();
     }

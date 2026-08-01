@@ -62,4 +62,33 @@ describe('JwtAuthGuard', () => {
       guard.canActivate(makeContext(`Bearer ${token}`)),
     ).resolves.toBe(true);
   });
+
+  it('토큰 발급과 같은 초에 비밀번호가 바뀌었으면 통과한다(초 단위 경계)', async () => {
+    const token = jwtService.sign({ sub: 1, email: 'a@test.com' });
+    const { iat } = jwtService.decode<{ iat: number }>(token);
+    // passwordChangedAt 을 토큰의 iat 와 같은 초 안에서, 하지만 더 나중(밀리초 단위)으로 설정.
+    const changedSameSecond = new Date(iat * 1000 + 500);
+    const guard = new JwtAuthGuard(
+      jwtService,
+      makeFakePrisma(changedSameSecond),
+    );
+
+    await expect(
+      guard.canActivate(makeContext(`Bearer ${token}`)),
+    ).resolves.toBe(true);
+  });
+
+  it('사용자를 찾을 수 없으면(탈퇴 등) 거부한다', async () => {
+    const token = jwtService.sign({ sub: 1, email: 'a@test.com' });
+    const prisma = {
+      user: {
+        findUnique: () => Promise.resolve(null),
+      },
+    } as unknown as PrismaService;
+    const guard = new JwtAuthGuard(jwtService, prisma);
+
+    await expect(
+      guard.canActivate(makeContext(`Bearer ${token}`)),
+    ).rejects.toThrow('인증이 필요합니다.');
+  });
 });
