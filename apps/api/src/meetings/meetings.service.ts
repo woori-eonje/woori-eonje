@@ -626,23 +626,37 @@ export class MeetingsService {
     });
     assertMeetingOwner(meeting, userId);
 
+    // 사전 status 체크 — 흔한 "이미 확정된 모임" 케이스를 빠르게 거부(confirmMeeting 과 동일 패턴).
     if (
       meeting.status !== MeetingStatus.COLLECTING &&
       meeting.status !== MeetingStatus.READY_TO_CONFIRM
     ) {
-      throw new DomainException(
-        ErrorCode.MEETING_NOT_EDITABLE,
-        HttpStatus.CONFLICT,
-        '확정된 모임의 참여자는 삭제할 수 없습니다.',
-      );
+      throw this.participantMeetingNotEditable();
     }
 
-    // meetingId 를 조건에 함께 넣어 "존재 + 이 모임 소속" 을 한 번에 원자적으로 확인
-    // (다른 모임의 participantId 를 전달하면 매칭되지 않아 count===0 → 404).
+    // 존재+소속+상태를 where 절에 모두 넣어 원자적으로 확인 — 이 체크와 삭제 사이에
+    // 다른 요청이 모임을 확정해도(경합) 확정된 모임에서 삭제가 새어나가지 않는다
+    // (confirmMeeting 의 조건부 updateMany 경합 방어와 정합).
     const { count } = await this.prisma.participant.deleteMany({
-      where: { id: participantId, meetingId },
+      where: {
+        id: participantId,
+        meetingId,
+        meeting: {
+          status: {
+            in: [MeetingStatus.COLLECTING, MeetingStatus.READY_TO_CONFIRM],
+          },
+        },
+      },
     });
     if (count === 0) {
+      // count===0 인 이유가 "참여자 없음/다른 모임 소속" 인지 "그 사이 확정됨" 인지 구분.
+      const stillExists = await this.prisma.participant.findFirst({
+        where: { id: participantId, meetingId },
+        select: { id: true },
+      });
+      if (stillExists) {
+        throw this.participantMeetingNotEditable();
+      }
       throw participantNotFound();
     }
 
@@ -650,6 +664,14 @@ export class MeetingsService {
     await this.recommendationsService.recompute(meetingId);
 
     return {};
+  }
+
+  private participantMeetingNotEditable(): DomainException {
+    return new DomainException(
+      ErrorCode.MEETING_NOT_EDITABLE,
+      HttpStatus.CONFLICT,
+      '확정된 모임의 참여자는 삭제할 수 없습니다.',
+    );
   }
 
   // POST /api/meetings/:meetingId/confirm — JWT + 모임장 소유.

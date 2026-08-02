@@ -331,9 +331,10 @@ describe('MeetingsService.getVoteDetails', () => {
   });
 });
 
-// deleteParticipant 전용 가짜 Prisma — meeting.status 조회 + participant.deleteMany(원자적
-// 존재+소속 확인) 만 필요. deleteMany 는 실제 Prisma 처럼 (id, meetingId) 모두 일치할 때만
-// 행을 지우고 count:1, 아니면 count:0 을 반환하도록 흉내낸다.
+// deleteParticipant 전용 가짜 Prisma — meeting.status 조회 + participant.deleteMany(존재+
+// 소속+상태를 한 where 절로 원자 확인) + count===0 일 때의 disambiguation용 findFirst 가 필요.
+// deleteMany 는 호출 시점의(= meeting 객체의 현재) status 를 그대로 확인해, "사전 체크 통과
+// 직후 다른 요청이 확정시키는" 경합을 onDeleteMany 훅으로 재현할 수 있게 한다.
 interface FakeMeetingRowWithStatus {
   id: number;
   ownerId: number;
@@ -343,17 +344,35 @@ interface FakeMeetingRowWithStatus {
 function makeDeleteParticipantFakePrisma(
   meeting: FakeMeetingRowWithStatus | null,
   participantRows: Array<{ id: number; meetingId: number }>,
+  options: { onDeleteMany?: () => void } = {},
 ): PrismaService {
   const prisma = {
     meeting: { findUnique: () => Promise.resolve(meeting) },
     participant: {
-      deleteMany: ({ where }: { where: { id: number; meetingId: number } }) => {
+      deleteMany: ({
+        where,
+      }: {
+        where: {
+          id: number;
+          meetingId: number;
+          meeting: { status: { in: MeetingStatus[] } };
+        };
+      }) => {
+        options.onDeleteMany?.();
         const idx = participantRows.findIndex(
           (p) => p.id === where.id && p.meetingId === where.meetingId,
         );
-        if (idx === -1) return Promise.resolve({ count: 0 });
+        const statusOk =
+          meeting !== null && where.meeting.status.in.includes(meeting.status);
+        if (idx === -1 || !statusOk) return Promise.resolve({ count: 0 });
         participantRows.splice(idx, 1);
         return Promise.resolve({ count: 1 });
+      },
+      findFirst: ({ where }: { where: { id: number; meetingId: number } }) => {
+        const found = participantRows.find(
+          (p) => p.id === where.id && p.meetingId === where.meetingId,
+        );
+        return Promise.resolve(found ?? null);
       },
     },
   };
@@ -412,6 +431,51 @@ describe('MeetingsService.deleteParticipant', () => {
       service.deleteParticipant(1, 10, OWNER_ID),
     ).rejects.toMatchObject({ code: 'MEETING_NOT_EDITABLE' });
     expect(participants).toEqual([{ id: 10, meetingId: 1 }]); // 그대로 남아있음
+    expect(recompute).not.toHaveBeenCalled();
+  });
+
+  it('CLOSED 모임이면 409(MEETING_NOT_EDITABLE)를 던지고 삭제하지 않는다', async () => {
+    const participants = [{ id: 10, meetingId: 1 }];
+    const prisma = makeDeleteParticipantFakePrisma(
+      { id: 1, ownerId: OWNER_ID, status: MeetingStatus.CLOSED },
+      participants,
+    );
+    const recompute = jest.fn().mockResolvedValue(undefined);
+    const service = new MeetingsService(prisma, {
+      recompute,
+    } as unknown as RecommendationsService);
+
+    await expect(
+      service.deleteParticipant(1, 10, OWNER_ID),
+    ).rejects.toMatchObject({ code: 'MEETING_NOT_EDITABLE' });
+    expect(participants).toEqual([{ id: 10, meetingId: 1 }]);
+    expect(recompute).not.toHaveBeenCalled();
+  });
+
+  it('사전 상태 체크 통과 직후 다른 요청이 모임을 확정하면(경합) 409를 던지고 삭제하지 않는다', async () => {
+    const participants = [{ id: 10, meetingId: 1 }];
+    // findUnique 는 COLLECTING 을 반환해 사전 체크는 통과하지만, deleteMany 호출 시점에
+    // (다른 요청의 confirmMeeting 이 그 사이 끼어든 것처럼) 상태가 CONFIRMED 로 바뀐다 —
+    // deleteMany 의 where 절에 상태 조건이 없다면 여기서 삭제가 새어나간다.
+    const meeting: FakeMeetingRowWithStatus = {
+      id: 1,
+      ownerId: OWNER_ID,
+      status: MeetingStatus.COLLECTING,
+    };
+    const prisma = makeDeleteParticipantFakePrisma(meeting, participants, {
+      onDeleteMany: () => {
+        meeting.status = MeetingStatus.CONFIRMED;
+      },
+    });
+    const recompute = jest.fn().mockResolvedValue(undefined);
+    const service = new MeetingsService(prisma, {
+      recompute,
+    } as unknown as RecommendationsService);
+
+    await expect(
+      service.deleteParticipant(1, 10, OWNER_ID),
+    ).rejects.toMatchObject({ code: 'MEETING_NOT_EDITABLE' });
+    expect(participants).toEqual([{ id: 10, meetingId: 1 }]); // 삭제되지 않음
     expect(recompute).not.toHaveBeenCalled();
   });
 
