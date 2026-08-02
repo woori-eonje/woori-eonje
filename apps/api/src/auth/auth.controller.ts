@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Post,
@@ -15,6 +16,7 @@ import type {
   LoginResult,
   ResetPasswordRequest,
   SignupRequest,
+  WithdrawRequest,
 } from '@whenwe/types';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard, type AuthenticatedRequest } from './jwt-auth.guard';
@@ -71,5 +73,16 @@ export class AuthController {
     @Body() body: ResetPasswordRequest,
   ): Promise<Record<string, never>> {
     return this.authService.resetPassword(body?.token, body?.newPassword);
+  }
+
+  // DELETE /api/auth/me — 회원 탈퇴 (JWT 필요). 비밀번호 재확인 후 삭제.
+  @Delete('me')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  withdraw(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: WithdrawRequest,
+  ): Promise<Record<string, never>> {
+    return this.authService.withdraw(req.user.id, body?.password);
   }
 }

@@ -245,6 +245,49 @@ export class AuthService {
     return {};
   }
 
+  // DELETE /api/auth/me — 회원 탈퇴. 비밀번호 재확인 후 한 트랜잭션으로:
+  // 1) 내가 참여자로 남긴 응답의 userId 를 null 로 분리(비회원화, 응답 자체는 유지)
+  // 2) 내가 소유한 모임 삭제(참여자·슬롯·가능시간·추천·상태로그는 스키마 cascade)
+  // 3) 사용자 삭제
+  // 다른 모임에 남긴 투표는 유지되고 재계산도 하지 않는다(소유하지 않은 모임은 안 건드림).
+  async withdraw(
+    userId: number,
+    password: string | undefined,
+  ): Promise<Record<string, never>> {
+    if (typeof password !== 'string') {
+      throw this.withdrawInvalidPassword();
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw this.withdrawInvalidPassword();
+    }
+
+    const passwordOk = await compare(password, user.password);
+    if (!passwordOk) {
+      throw this.withdrawInvalidPassword();
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.participant.updateMany({
+        where: { userId },
+        data: { userId: null },
+      });
+      await tx.meeting.deleteMany({ where: { ownerId: userId } });
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    return {};
+  }
+
+  private withdrawInvalidPassword(): DomainException {
+    return new DomainException(
+      ErrorCode.INVALID_CREDENTIALS,
+      HttpStatus.UNAUTHORIZED,
+      '비밀번호가 올바르지 않습니다.',
+    );
+  }
+
   private invalidCredentials(): DomainException {
     return new DomainException(
       ErrorCode.INVALID_CREDENTIALS,

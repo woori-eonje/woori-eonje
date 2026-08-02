@@ -122,6 +122,33 @@ paths:
                       data: { $ref: '#/components/schemas/AuthUser' }
         '401':
           $ref: '#/components/responses/Error'
+    delete:
+      tags: [Auth]
+      operationId: withdraw
+      summary: 회원 탈퇴
+      description: |
+        비밀번호 재확인 후 탈퇴 처리한다. 소유한 모임은 하위 데이터(참여자·슬롯·
+        가능시간·추천·상태로그)와 함께 삭제되고, 다른 모임에 남긴 참여 기록은
+        유지되되 userId 가 null 로 분리된다(비회원화). 탈퇴한 사용자의 기존 JWT는
+        이후 보호 API에서 사용할 수 없다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WithdrawRequest' }
+      responses:
+        '200':
+          description: 탈퇴 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Empty' }
+        '401':
+          $ref: '#/components/responses/Error'
 
   /api/auth/password/forgot:
     post:
@@ -793,6 +820,11 @@ components:
       properties:
         token: { type: string }
         newPassword: { type: string, minLength: 8, maxLength: 72 }
+    WithdrawRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, description: '현재 비밀번호 재확인' }
 
     # ── Meetings ──
     CreateMeetingRequest:

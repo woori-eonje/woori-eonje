@@ -113,7 +113,8 @@ model Participant {
   createdAt       DateTime        @default(now()) @map("created_at")
 
   meeting        Meeting                   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-  user           User?                     @relation(fields: [userId], references: [id])
+  // 회원 탈퇴 시 이 참여자·응답은 유지하되 회원 연결만 끊는다(userId → null).
+  user           User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
   availabilities ParticipantAvailability[]
 
   // 회원(userId 존재)은 한 모임에 한 번만 — 비회원(userId null)은 Postgres 가 NULL 을

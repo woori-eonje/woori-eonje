@@ -138,6 +138,11 @@ export interface ResetPasswordRequest {
   newPassword: string;
 }
 
+export interface WithdrawRequest {
+  /** 현재 비밀번호 재확인 */
+  password: string;
+}
+
 // ── API DTO: 모임 생성 (POST /api/meetings) ────────────────────
 // openapi.yaml 의 CreateMeetingRequest/MeetingCreated 스키마와 일치. FE·BE 공유.
 export interface CreateMeetingRequest {
