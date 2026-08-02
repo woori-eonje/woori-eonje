@@ -146,7 +146,7 @@ export interface CreateMeetingRequest {
   /** ~500자, 없으면 null */
   description?: string | null;
   category: MeetingCategory;
-  /** YYYY-MM-DD (기간은 최대 14일) */
+  /** YYYY-MM-DD (기간은 최대 30일) */
   startDate: string;
   /** YYYY-MM-DD */
   endDate: string;

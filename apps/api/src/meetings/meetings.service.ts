@@ -22,7 +22,7 @@ import { RecommendationsService } from '../recommendations/recommendations.servi
 import { buildICS } from './ics';
 import { expandDateRange, generateSlots } from './slot-generation';
 
-const MAX_PERIOD_DAYS = 14;
+const MAX_PERIOD_DAYS = 30;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
