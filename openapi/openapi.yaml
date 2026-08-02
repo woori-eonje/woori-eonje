@@ -123,6 +123,57 @@ paths:
         '401':
           $ref: '#/components/responses/Error'
 
+  /api/auth/password/forgot:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: 비밀번호 재설정 메일 요청
+      description: 계정 존재 여부와 무관하게 항상 동일한 200 응답을 반환한다. IP 단위 5회/분 제한.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+      responses:
+        '200':
+          description: 요청 접수(계정 존재 여부·발송 성공 여부와 무관하게 항상 동일)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Empty' }
+        '400':
+          $ref: '#/components/responses/Error'
+
+  /api/auth/password/reset:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: 새 비밀번호 설정
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '200':
+          description: 비밀번호 변경 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Empty' }
+        '400':
+          $ref: '#/components/responses/Error'
+
   # ──────────────── Meetings ────────────────
   /api/meetings:
     post:
@@ -702,6 +753,7 @@ components:
         - EMAIL_ALREADY_EXISTS
         - INVALID_CREDENTIALS
         - UNAUTHENTICATED
+        - PASSWORD_RESET_TOKEN_INVALID
         - VALIDATION_ERROR
         - INTERNAL_ERROR
 
@@ -730,6 +782,17 @@ components:
       properties:
         accessToken: { type: string }
         user: { $ref: '#/components/schemas/AuthUser' }
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, minLength: 8, maxLength: 72 }
 
     # ── Meetings ──
     CreateMeetingRequest:
