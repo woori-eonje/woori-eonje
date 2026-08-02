@@ -182,7 +182,11 @@ export class AvailabilityService {
     authHeader: string | undefined,
   ) {
     // 회원 경로: Bearer 가 유효하면 (userId, meetingId) 로 참여자 조회.
-    const userId = await resolveOptionalUserId(this.jwtService, authHeader);
+    const userId = await resolveOptionalUserId(
+      this.jwtService,
+      this.prisma,
+      authHeader,
+    );
     if (userId !== null) {
       const member = await this.prisma.participant.findUnique({
         where: { userId_meetingId: { userId, meetingId } },

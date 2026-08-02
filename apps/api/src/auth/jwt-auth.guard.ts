@@ -26,6 +26,33 @@ export interface AuthenticatedUser {
 // req.user 를 붙인 요청 타입.
 export type AuthenticatedRequest = Request & { user: AuthenticatedUser };
 
+// 비밀번호 재설정 이후에 발급된 토큰인지 확인한다.
+// 사용자가 삭제됐거나, 재설정 이전에 발급된 토큰이면 false.
+// JwtAuthGuard 와 선택적 Bearer 경로(optional-bearer)가 공유한다.
+//
+// iat 는 초 단위로 내림된 값이라 passwordChangedAt(밀리초 정밀도)과 그대로
+// 비교하면 같은 초 안에서 발급된 최신 토큰이 잘못 거부될 수 있다.
+// passwordChangedAt 도 초 단위로 내림해, 최대 1초의 구 토큰 유효기간을
+// 감수하고 같은 초 오탈락을 없앤다.
+export async function isTokenIssuedAfterPasswordChange(
+  prisma: PrismaService,
+  payload: JwtPayload,
+): Promise<boolean> {
+  const user = await prisma.user.findUnique({
+    where: { id: payload.sub },
+    select: { passwordChangedAt: true },
+  });
+  if (!user) {
+    return false;
+  }
+  return !(
+    user.passwordChangedAt &&
+    payload.iat !== undefined &&
+    payload.iat * 1000 <
+      Math.floor(user.passwordChangedAt.getTime() / 1000) * 1000
+  );
+}
+
 // Authorization: Bearer <JWT> 헤더를 검증하고 req.user = { id, email } 를 채운다.
 // 토큰이 없거나 무효면 UNAUTHENTICATED(401). 재사용 가능하도록 export.
 //
@@ -54,23 +81,7 @@ export class JwtAuthGuard implements CanActivate {
       throw this.unauthenticated();
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { passwordChangedAt: true },
-    });
-    if (!user) {
-      throw this.unauthenticated();
-    }
-    // iat 는 초 단위로 내림된 값이라 passwordChangedAt(밀리초 정밀도)과 그대로
-    // 비교하면 같은 초 안에서 발급된 최신 토큰이 잘못 거부될 수 있다.
-    // passwordChangedAt 도 초 단위로 내림해, 최대 1초의 구 토큰 유효기간을
-    // 감수하고 같은 초 오탈락을 없앤다.
-    if (
-      user.passwordChangedAt &&
-      payload.iat !== undefined &&
-      payload.iat * 1000 <
-        Math.floor(user.passwordChangedAt.getTime() / 1000) * 1000
-    ) {
+    if (!(await isTokenIssuedAfterPasswordChange(this.prisma, payload))) {
       throw this.unauthenticated();
     }
 
