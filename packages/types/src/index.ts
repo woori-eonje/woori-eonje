@@ -69,6 +69,7 @@ export const ErrorCode = {
   EMAIL_ALREADY_EXISTS: 'EMAIL_ALREADY_EXISTS',
   INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
   UNAUTHENTICATED: 'UNAUTHENTICATED',
+  PASSWORD_RESET_TOKEN_INVALID: 'PASSWORD_RESET_TOKEN_INVALID',
   // ── 공통(입력 검증 실패 / 미분류 서버 오류) ──
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
@@ -123,6 +124,18 @@ export interface LoginResult {
   /** JWT (Authorization: Bearer <accessToken>) */
   accessToken: string;
   user: AuthUser;
+}
+
+export interface ForgotPasswordRequest {
+  /** format: email */
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  /** 메일 링크의 원본 토큰 */
+  token: string;
+  /** 8~72자 */
+  newPassword: string;
 }
 
 // ── API DTO: 모임 생성 (POST /api/meetings) ────────────────────

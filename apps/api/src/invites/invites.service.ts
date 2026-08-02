@@ -106,7 +106,11 @@ export class InvitesService {
     }
 
     // Bearer 가 있으면 로그인 사용자를 회원(MEMBER)으로 연동. 없으면 기존 비회원(GUEST).
-    const userId = await resolveOptionalUserId(this.jwtService, authHeader);
+    const userId = await resolveOptionalUserId(
+      this.jwtService,
+      this.prisma,
+      authHeader,
+    );
 
     if (userId !== null) {
       // 회원은 한 모임 1회 — 이미 참여했으면 기존 참여자를 그대로 반환(멱등).

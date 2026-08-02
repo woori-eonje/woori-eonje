@@ -7,10 +7,13 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import type {
   AuthUser,
+  ForgotPasswordRequest,
   LoginRequest,
   LoginResult,
+  ResetPasswordRequest,
   SignupRequest,
 } from '@whenwe/types';
 import { AuthService } from './auth.service';
@@ -47,5 +50,26 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   logout(): Record<string, never> {
     return {};
+  }
+
+  // POST /api/auth/password/forgot — 비밀번호 재설정 메일 요청 (인증 불필요)
+  // IP 단위 5회/분 제한. 계정 존재 여부와 무관하게 항상 동일한 응답을 반환한다.
+  @Post('password/forgot')
+  @HttpCode(200)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  forgotPassword(
+    @Body() body: ForgotPasswordRequest,
+  ): Promise<Record<string, never>> {
+    return this.authService.forgotPassword(body?.email);
+  }
+
+  // POST /api/auth/password/reset — 새 비밀번호 설정 (인증 불필요, 토큰으로 검증)
+  @Post('password/reset')
+  @HttpCode(200)
+  resetPassword(
+    @Body() body: ResetPasswordRequest,
+  ): Promise<Record<string, never>> {
+    return this.authService.resetPassword(body?.token, body?.newPassword);
   }
 }

@@ -19,9 +19,11 @@ db  (PostgreSQL)         → Neon          (클라우드 Postgres, 무료 티어
 |---|---|---|
 | `DATABASE_URL` | `postgresql://U:P@ep-xxx.aws.neon.tech/whenwe?sslmode=require` | Neon **직접(direct)** 연결, `sslmode=require` 필수 |
 | `JWT_SECRET` | (랜덤 64자+) | 미설정 시 부팅 실패 |
-| `WEB_BASE_URL` | `https://woori-eonje.vercel.app` | inviteUrl 생성용 |
+| `WEB_BASE_URL` | `https://woori-eonje.vercel.app` | inviteUrl · 비밀번호 재설정 링크 생성용 |
 | `CORS_ORIGIN` | `https://woori-eonje.vercel.app` | 쉼표로 여러 개 가능 |
 | `PORT` | (Railway 자동 주입) | 코드가 `process.env.PORT` 사용 |
+| `RESEND_API_KEY` | `re_xxxxxxxx` | **미설정 시 부팅 실패** — `MailService` 생성자가 예외를 던져 앱 전체가 안 뜬다 |
+| `MAIL_FROM` | `noreply@woori-eonje.app` | 비밀번호 재설정 발신 주소. Resend 에서 SPF/DKIM 인증이 끝난 도메인이어야 실제 발송됨. 미설정 시 이 값으로 폴백 |
 
 ### web (Vercel)
 | 키 | 예시 |
