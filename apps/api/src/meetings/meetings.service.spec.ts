@@ -1,6 +1,7 @@
 import {
   AvailabilityStatus,
   MeetingCategory,
+  MeetingStatus,
   ParticipantType,
 } from '@whenwe/types';
 import type { CreateMeetingRequest } from '@whenwe/types';
@@ -327,5 +328,134 @@ describe('MeetingsService.getVoteDetails', () => {
     await expect(service.getVoteDetails(999, OWNER_ID)).rejects.toMatchObject({
       code: 'MEETING_NOT_FOUND',
     });
+  });
+});
+
+// deleteParticipant 전용 가짜 Prisma — meeting.status 조회 + participant.deleteMany(원자적
+// 존재+소속 확인) 만 필요. deleteMany 는 실제 Prisma 처럼 (id, meetingId) 모두 일치할 때만
+// 행을 지우고 count:1, 아니면 count:0 을 반환하도록 흉내낸다.
+interface FakeMeetingRowWithStatus {
+  id: number;
+  ownerId: number;
+  status: MeetingStatus;
+}
+
+function makeDeleteParticipantFakePrisma(
+  meeting: FakeMeetingRowWithStatus | null,
+  participantRows: Array<{ id: number; meetingId: number }>,
+): PrismaService {
+  const prisma = {
+    meeting: { findUnique: () => Promise.resolve(meeting) },
+    participant: {
+      deleteMany: ({ where }: { where: { id: number; meetingId: number } }) => {
+        const idx = participantRows.findIndex(
+          (p) => p.id === where.id && p.meetingId === where.meetingId,
+        );
+        if (idx === -1) return Promise.resolve({ count: 0 });
+        participantRows.splice(idx, 1);
+        return Promise.resolve({ count: 1 });
+      },
+    },
+  };
+  return prisma as unknown as PrismaService;
+}
+
+describe('MeetingsService.deleteParticipant', () => {
+  const OWNER_ID = 1;
+
+  it('COLLECTING 모임에서 소속 참여자를 삭제하고 추천을 재계산한다', async () => {
+    const participants = [{ id: 10, meetingId: 1 }];
+    const prisma = makeDeleteParticipantFakePrisma(
+      { id: 1, ownerId: OWNER_ID, status: MeetingStatus.COLLECTING },
+      participants,
+    );
+    const recompute = jest.fn().mockResolvedValue(undefined);
+    const service = new MeetingsService(prisma, {
+      recompute,
+    } as unknown as RecommendationsService);
+
+    const result = await service.deleteParticipant(1, 10, OWNER_ID);
+
+    expect(result).toEqual({});
+    expect(participants).toEqual([]); // 실제로 삭제됨
+    expect(recompute).toHaveBeenCalledWith(1);
+  });
+
+  it('READY_TO_CONFIRM 모임에서도 삭제를 허용한다', async () => {
+    const participants = [{ id: 10, meetingId: 1 }];
+    const prisma = makeDeleteParticipantFakePrisma(
+      { id: 1, ownerId: OWNER_ID, status: MeetingStatus.READY_TO_CONFIRM },
+      participants,
+    );
+    const recompute = jest.fn().mockResolvedValue(undefined);
+    const service = new MeetingsService(prisma, {
+      recompute,
+    } as unknown as RecommendationsService);
+
+    await expect(service.deleteParticipant(1, 10, OWNER_ID)).resolves.toEqual(
+      {},
+    );
+  });
+
+  it('CONFIRMED 모임이면 409(MEETING_NOT_EDITABLE)를 던지고 삭제하지 않는다', async () => {
+    const participants = [{ id: 10, meetingId: 1 }];
+    const prisma = makeDeleteParticipantFakePrisma(
+      { id: 1, ownerId: OWNER_ID, status: MeetingStatus.CONFIRMED },
+      participants,
+    );
+    const recompute = jest.fn().mockResolvedValue(undefined);
+    const service = new MeetingsService(prisma, {
+      recompute,
+    } as unknown as RecommendationsService);
+
+    await expect(
+      service.deleteParticipant(1, 10, OWNER_ID),
+    ).rejects.toMatchObject({ code: 'MEETING_NOT_EDITABLE' });
+    expect(participants).toEqual([{ id: 10, meetingId: 1 }]); // 그대로 남아있음
+    expect(recompute).not.toHaveBeenCalled();
+  });
+
+  it('다른 모임 소속 participantId 를 전달하면 404(PARTICIPANT_NOT_FOUND)를 던진다', async () => {
+    const participants = [{ id: 10, meetingId: 2 }]; // 다른 모임(meetingId=2) 소속
+    const prisma = makeDeleteParticipantFakePrisma(
+      { id: 1, ownerId: OWNER_ID, status: MeetingStatus.COLLECTING },
+      participants,
+    );
+    const recompute = jest.fn().mockResolvedValue(undefined);
+    const service = new MeetingsService(prisma, {
+      recompute,
+    } as unknown as RecommendationsService);
+
+    await expect(
+      service.deleteParticipant(1, 10, OWNER_ID),
+    ).rejects.toMatchObject({ code: 'PARTICIPANT_NOT_FOUND' });
+    expect(recompute).not.toHaveBeenCalled();
+  });
+
+  it('모임장이 아니면 403(FORBIDDEN_MEETING_OWNER_ONLY)을 던진다', async () => {
+    const prisma = makeDeleteParticipantFakePrisma(
+      { id: 1, ownerId: OWNER_ID, status: MeetingStatus.COLLECTING },
+      [{ id: 10, meetingId: 1 }],
+    );
+    const service = new MeetingsService(
+      prisma,
+      {} as unknown as RecommendationsService,
+    );
+
+    await expect(service.deleteParticipant(1, 10, 999)).rejects.toMatchObject({
+      code: 'FORBIDDEN_MEETING_OWNER_ONLY',
+    });
+  });
+
+  it('존재하지 않는 모임이면 404(MEETING_NOT_FOUND)를 던진다', async () => {
+    const prisma = makeDeleteParticipantFakePrisma(null, []);
+    const service = new MeetingsService(
+      prisma,
+      {} as unknown as RecommendationsService,
+    );
+
+    await expect(
+      service.deleteParticipant(999, 10, OWNER_ID),
+    ).rejects.toMatchObject({ code: 'MEETING_NOT_FOUND' });
   });
 });

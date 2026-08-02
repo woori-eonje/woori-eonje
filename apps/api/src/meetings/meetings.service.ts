@@ -20,7 +20,11 @@ import {
   type VoteDetailsResponse,
 } from '@whenwe/types';
 import { DomainException } from '../common/domain-exception';
-import { assertMeetingOwner, meetingNotFound } from '../common/meeting-access';
+import {
+  assertMeetingOwner,
+  meetingNotFound,
+  participantNotFound,
+} from '../common/meeting-access';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   buildStatusMap,
@@ -606,6 +610,46 @@ export class MeetingsService {
       participantType: updated.participantType,
       isRequired: updated.isRequired,
     };
+  }
+
+  // DELETE /api/meetings/:meetingId/participants/:participantId — JWT + 모임장 소유.
+  // COLLECTING/READY_TO_CONFIRM 에서만 허용(확정된 모임은 결과 보존을 위해 거부).
+  // availability는 Participant.availabilities 의 onDelete: Cascade(schema)로 함께 삭제된다.
+  async deleteParticipant(
+    meetingId: number,
+    participantId: number,
+    userId: number,
+  ): Promise<Record<string, never>> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true, status: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    if (
+      meeting.status !== MeetingStatus.COLLECTING &&
+      meeting.status !== MeetingStatus.READY_TO_CONFIRM
+    ) {
+      throw new DomainException(
+        ErrorCode.MEETING_NOT_EDITABLE,
+        HttpStatus.CONFLICT,
+        '확정된 모임의 참여자는 삭제할 수 없습니다.',
+      );
+    }
+
+    // meetingId 를 조건에 함께 넣어 "존재 + 이 모임 소속" 을 한 번에 원자적으로 확인
+    // (다른 모임의 participantId 를 전달하면 매칭되지 않아 count===0 → 404).
+    const { count } = await this.prisma.participant.deleteMany({
+      where: { id: participantId, meetingId },
+    });
+    if (count === 0) {
+      throw participantNotFound();
+    }
+
+    // 참여자 삭제 → 추천 결과 재계산(8단계 ①~⑥에 영향).
+    await this.recommendationsService.recompute(meetingId);
+
+    return {};
   }
 
   // POST /api/meetings/:meetingId/confirm — JWT + 모임장 소유.

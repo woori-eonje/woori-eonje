@@ -447,6 +447,33 @@ paths:
         in: path
         required: true
         schema: { type: integer }
+    delete:
+      tags: [Meetings]
+      operationId: deleteParticipant
+      summary: 참여자 삭제 (모임장)
+      description: |
+        COLLECTING/READY_TO_CONFIRM 상태에서만 허용한다. CONFIRMED/CLOSED 된
+        모임은 확정 결과 보존을 위해 거부(409)된다. 참여자의 가능시간(availability)은
+        스키마의 onDelete Cascade 로 함께 삭제되며, 삭제 후 추천 결과를 재계산한다.
+      responses:
+        '200':
+          description: 삭제 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Empty' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
     patch:
       tags: [Meetings]
       operationId: setParticipantRequired
@@ -821,6 +848,7 @@ components:
         - MEETING_ALREADY_CONFIRMED
         - RESPONSE_ALREADY_EXISTS
         - MEETING_NOT_EDITABLE
+        - PARTICIPANT_NOT_FOUND
         - PARTICIPANT_EDIT_TOKEN_INVALID
         - FORBIDDEN_MEETING_OWNER_ONLY
         - RECOMMENDATION_NOT_READY

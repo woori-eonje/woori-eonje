@@ -120,6 +120,23 @@ export class MeetingsController {
     return this.meetingsService.getVoteDetails(meetingId, req.user.id);
   }
 
+  // DELETE /api/meetings/:meetingId/participants/:participantId
+  // 참여자 삭제 (JWT 필요 + 모임장 소유). COLLECTING/READY_TO_CONFIRM 에서만 허용.
+  @Delete(':meetingId/participants/:participantId')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  deleteParticipant(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+    @Param('participantId', ParseIntPipe) participantId: number,
+  ): Promise<Record<string, never>> {
+    return this.meetingsService.deleteParticipant(
+      meetingId,
+      participantId,
+      req.user.id,
+    );
+  }
+
   // PATCH /api/meetings/:meetingId/participants/:participantId
   // 필수참석자 지정/해제 (JWT 필요 + 모임장 소유). 변경 후 추천 재계산.
   @Patch(':meetingId/participants/:participantId')
