@@ -47,8 +47,13 @@ export interface RankedCandidate {
   score: number;
 }
 
-// 한 참여자의 한 후보 구간에서의 분류.
-type IntervalClass = 'available' | 'maybe' | 'unavailable' | 'no_response';
+// 한 참여자의 한 후보 구간에서의 분류. vote-details(참여자별 투표 상세)가 같은 규칙을
+// 재사용하도록 export — 프론트가 이 분류를 별도 재구현하면 추천 인원수와 어긋날 수 있다.
+export type IntervalClass =
+  | 'available'
+  | 'maybe'
+  | 'unavailable'
+  | 'no_response';
 
 // 정렬용 내부 메트릭(저장되지 않는 noResponseCount, 첫 슬롯 id 포함).
 interface CandidateMetric {
@@ -66,6 +71,19 @@ interface CandidateMetric {
   score: number;
 }
 
+// (participantId, slotId) -> status 빠른 조회 맵 생성. classifyParticipant 와 같은
+// 키 포맷(`${participantId}:${slotId}`)을 다른 모듈(vote-details 등)에서도 그대로
+// 재사용할 수 있도록 export — 키 포맷이 바뀌면 한 곳만 고치면 되게 한다.
+export function buildStatusMap(
+  responses: EngineResponse[],
+): Map<string, AvailabilityStatus> {
+  const statusByKey = new Map<string, AvailabilityStatus>();
+  for (const r of responses) {
+    statusByKey.set(`${r.participantId}:${r.slotId}`, r.availabilityStatus);
+  }
+  return statusByKey;
+}
+
 export function computeRecommendations(input: EngineInput): RankedCandidate[] {
   const { durationHours: n, slots, participants, responses } = input;
 
@@ -73,11 +91,7 @@ export function computeRecommendations(input: EngineInput): RankedCandidate[] {
     return [];
   }
 
-  // (participantId, slotId) -> status 빠른 조회.
-  const statusByKey = new Map<string, AvailabilityStatus>();
-  for (const r of responses) {
-    statusByKey.set(`${r.participantId}:${r.slotId}`, r.availabilityStatus);
-  }
+  const statusByKey = buildStatusMap(responses);
 
   const metrics: CandidateMetric[] = [];
 
@@ -184,7 +198,7 @@ function buildMetric(
 }
 
 // ② 참여자별 구간 상태: 미응답 슬롯 하나라도 있으면 미응답, 아니면 min(가장 나쁜 것).
-function classifyParticipant(
+export function classifyParticipant(
   participantId: number,
   window: EngineSlot[],
   statusByKey: Map<string, AvailabilityStatus>,

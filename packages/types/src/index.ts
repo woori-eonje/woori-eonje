@@ -377,6 +377,47 @@ export interface RecommendationsResponse {
   recommendations: Recommendation[];
 }
 
+// ── API DTO: 참여자별 투표 상세 (GET /api/meetings/{meetingId}/vote-details) ──
+// openapi.yaml 의 VoteDetailsResponse 스키마와 일치. FE·BE 공유. 모임장 전용.
+// 추천 구간 상태는 AvailabilityStatus(가능/애매/불가) 에 없는 미응답(NO_RESPONSE)을
+// 포함해야 해서 별도 유니온으로 둔다.
+export const ParticipantWindowStatus = {
+  AVAILABLE: 'AVAILABLE',
+  MAYBE: 'MAYBE',
+  UNAVAILABLE: 'UNAVAILABLE',
+  NO_RESPONSE: 'NO_RESPONSE',
+} as const;
+export type ParticipantWindowStatus =
+  (typeof ParticipantWindowStatus)[keyof typeof ParticipantWindowStatus];
+
+export interface SlotVoteDetail {
+  slotId: number;
+  /** ISO 8601 date-time */
+  startAt: string;
+  /** ISO 8601 date-time */
+  endAt: string;
+  /** 이 슬롯에 응답을 남긴 참여자만 포함(미응답자는 없음) — aggregate 카운트와 합이 같다. */
+  votes: Array<{ participantId: number; status: AvailabilityStatus }>;
+}
+
+export interface RecommendationParticipantDetail {
+  recommendationId: number;
+  /** 전체 참여자 포함 — 미응답자도 NO_RESPONSE 로 명시된다. */
+  participantStatuses: Array<{
+    participantId: number;
+    status: ParticipantWindowStatus;
+  }>;
+}
+
+export interface VoteDetailsResponse {
+  meetingId: number;
+  /** createdAt 오름차순 */
+  participants: ParticipantWithStatus[];
+  /** slotStartAt 오름차순 */
+  slots: SlotVoteDetail[];
+  recommendations: RecommendationParticipantDetail[];
+}
+
 // ── API DTO: 일정 확정 (POST /api/meetings/{meetingId}/confirm) ──
 // openapi.yaml 의 ConfirmResult / 요청 스키마와 일치. FE·BE 공유.
 export interface ConfirmMeetingRequest {

@@ -396,6 +396,50 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /api/meetings/{meetingId}/vote-details:
+    parameters:
+      - $ref: '#/components/parameters/MeetingId'
+    get:
+      tags: [Meetings]
+      operationId: getVoteDetails
+      summary: 참여자별 투표 상세 (모임장)
+      description: |
+        "누가 어떤 시간에 무엇을 선택했는지" 전체 상세. 슬롯별 투표와 추천 구간별
+        참여자 상태를 함께 반환한다. 추천 구간 상태는 추천 엔진과 같은 규칙으로
+        계산되며(classifyParticipant 재사용), 미응답 참여자는 NO_RESPONSE 로
+        명시 포함된다. 공개 초대 API 에는 제공하지 않는다.
+      responses:
+        '200':
+          description: 참여자별 투표 상세
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          meetingId: { type: integer }
+                          participants:
+                            type: array
+                            description: 'createdAt 오름차순'
+                            items: { $ref: '#/components/schemas/ParticipantWithStatus' }
+                          slots:
+                            type: array
+                            description: 'slotStartAt 오름차순'
+                            items: { $ref: '#/components/schemas/SlotVoteDetail' }
+                          recommendations:
+                            type: array
+                            items: { $ref: '#/components/schemas/RecommendationParticipantDetail' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
   /api/meetings/{meetingId}/participants/{participantId}:
     parameters:
       - $ref: '#/components/parameters/MeetingId'
@@ -757,6 +801,10 @@ components:
     AvailabilityStatus:
       type: string
       enum: [AVAILABLE, MAYBE, UNAVAILABLE]
+    ParticipantWindowStatus:
+      type: string
+      description: '추천 구간(여러 슬롯 묶음)에서의 참여자 상태. AvailabilityStatus 와 달리 미응답(NO_RESPONSE)을 포함한다.'
+      enum: [AVAILABLE, MAYBE, UNAVAILABLE, NO_RESPONSE]
     ParticipantType:
       type: string
       enum: [MEMBER, GUEST]
@@ -958,6 +1006,22 @@ components:
         availableCount: { type: integer }    # 이 슬롯에 '가능'을 찍은 참여자 수
         maybeCount: { type: integer }        # '애매'
         unavailableCount: { type: integer }  # '불가'
+    SlotVoteDetail:
+      type: object
+      required: [slotId, startAt, endAt, votes]
+      properties:
+        slotId: { type: integer }
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        votes:
+          type: array
+          description: '이 슬롯에 응답을 남긴 참여자만 포함(미응답자는 없음) — aggregate 카운트와 합이 같다.'
+          items:
+            type: object
+            required: [participantId, status]
+            properties:
+              participantId: { type: integer }
+              status: { $ref: '#/components/schemas/AvailabilityStatus' }
     AvailabilityItem:
       type: object
       required: [slotId, status]
@@ -997,6 +1061,20 @@ components:
         requiredUnavailableCount: { type: integer }
         requiredParticipantSatisfied: { type: boolean }
         score: { type: integer }
+    RecommendationParticipantDetail:
+      type: object
+      required: [recommendationId, participantStatuses]
+      properties:
+        recommendationId: { type: integer }
+        participantStatuses:
+          type: array
+          description: '전체 참여자 포함 — 미응답자는 NO_RESPONSE 로 명시된다.'
+          items:
+            type: object
+            required: [participantId, status]
+            properties:
+              participantId: { type: integer }
+              status: { $ref: '#/components/schemas/ParticipantWindowStatus' }
 
 # 전역 기본 보안: JWT Bearer (각 비회원/공개 엔드포인트에서 security 로 override)
 security:

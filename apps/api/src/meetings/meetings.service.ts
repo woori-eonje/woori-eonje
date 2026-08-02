@@ -14,13 +14,34 @@ import {
   type MeetingSummary,
   type Participant,
   type ParticipantsResponse,
+  ParticipantWindowStatus,
+  type RecommendationParticipantDetail,
+  type SlotVoteDetail,
+  type VoteDetailsResponse,
 } from '@whenwe/types';
 import { DomainException } from '../common/domain-exception';
 import { assertMeetingOwner, meetingNotFound } from '../common/meeting-access';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  buildStatusMap,
+  classifyParticipant,
+  type EngineSlot,
+  type IntervalClass,
+} from '../recommendations/recommendation.engine';
 import { RecommendationsService } from '../recommendations/recommendations.service';
 import { buildICS } from './ics';
 import { expandDateRange, generateSlots } from './slot-generation';
+
+// 엔진의 소문자 IntervalClass → API 계약의 대문자 ParticipantWindowStatus.
+const INTERVAL_CLASS_TO_WINDOW_STATUS: Record<
+  IntervalClass,
+  ParticipantWindowStatus
+> = {
+  available: ParticipantWindowStatus.AVAILABLE,
+  maybe: ParticipantWindowStatus.MAYBE,
+  unavailable: ParticipantWindowStatus.UNAVAILABLE,
+  no_response: ParticipantWindowStatus.NO_RESPONSE,
+};
 
 const MAX_PERIOD_DAYS = 30;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -422,6 +443,123 @@ export class MeetingsService {
           unavailableCount: c?.unavailable ?? 0,
         };
       }),
+    };
+  }
+
+  // GET /api/meetings/:meetingId/vote-details — JWT + 모임장 소유. 공개 초대 API에는 없음.
+  // "누가 어떤 시간에 무엇을 선택했는지" 전체 상세 — 슬롯별 투표 + 추천 구간별 참여자 상태.
+  // 추천 구간 상태는 recommendation.engine 의 classifyParticipant 를 그대로 재사용해,
+  // 프론트가 규칙을 별도 재구현할 때 생길 수 있는 추천 인원수와의 불일치를 막는다.
+  async getVoteDetails(
+    meetingId: number,
+    userId: number,
+  ): Promise<VoteDetailsResponse> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    const [participants, slots, responses, recommendations] = await Promise.all(
+      [
+        this.prisma.participant.findMany({
+          where: { meetingId },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            guestName: true,
+            participantType: true,
+            isRequired: true,
+          },
+        }),
+        this.prisma.availabilitySlot.findMany({
+          where: { meetingId },
+          orderBy: { slotStartAt: 'asc' },
+          select: { id: true, slotStartAt: true, slotEndAt: true },
+        }),
+        this.prisma.participantAvailability.findMany({
+          where: { meetingId },
+          select: {
+            participantId: true,
+            slotId: true,
+            availabilityStatus: true,
+          },
+        }),
+        this.prisma.recommendationResult.findMany({
+          where: { meetingId },
+          orderBy: { rank: 'asc' },
+          select: { id: true, startAt: true, endAt: true },
+        }),
+      ],
+    );
+
+    // hasResponded: 응답 목록에 한 번이라도 등장하는지로 판정(별도 distinct 쿼리 불필요 —
+    // 이미 전체 응답을 메모리에 들고 있어 listParticipants 와 달리 재조회하지 않는다).
+    const respondedParticipantIds = new Set(
+      responses.map((r) => r.participantId),
+    );
+    const participantsOut = participants.map((p) => ({
+      participantId: p.id,
+      guestName: p.guestName,
+      participantType: p.participantType,
+      isRequired: p.isRequired,
+      hasResponded: respondedParticipantIds.has(p.id),
+    }));
+
+    // 슬롯별 투표 — 미응답 참여자는 votes 에 없음(aggregate 카운트와 합이 일치해야 함).
+    const votesBySlot = new Map<
+      number,
+      Array<{ participantId: number; status: AvailabilityStatus }>
+    >();
+    for (const r of responses) {
+      const list = votesBySlot.get(r.slotId) ?? [];
+      list.push({
+        participantId: r.participantId,
+        status: r.availabilityStatus,
+      });
+      votesBySlot.set(r.slotId, list);
+    }
+    const slotsOut: SlotVoteDetail[] = slots.map((s) => ({
+      slotId: s.id,
+      startAt: s.slotStartAt.toISOString(),
+      endAt: s.slotEndAt.toISOString(),
+      votes: votesBySlot.get(s.id) ?? [],
+    }));
+
+    // 추천 구간별 참여자 상태 — 저장된 추천 행은 slotId 목록을 갖고 있지 않으므로
+    // (startAt~endAt) 범위로 해당 구간의 슬롯들을 다시 골라 classifyParticipant 에 넣는다.
+    // ISO 문자열은 사전식 비교가 시간 순서와 일치해 그대로 범위 비교에 쓸 수 있다.
+    const engineSlots: EngineSlot[] = slots.map((s) => ({
+      id: s.id,
+      slotStartAt: s.slotStartAt.toISOString(),
+      slotEndAt: s.slotEndAt.toISOString(),
+    }));
+    const statusByKey = buildStatusMap(responses);
+    const recommendationsOut: RecommendationParticipantDetail[] =
+      recommendations.map((rec) => {
+        const rangeStart = rec.startAt.toISOString();
+        const rangeEnd = rec.endAt.toISOString();
+        const window = engineSlots.filter(
+          (s) => s.slotStartAt >= rangeStart && s.slotEndAt <= rangeEnd,
+        );
+        return {
+          recommendationId: rec.id,
+          // 전체 참여자 포함 — 미응답자도 NO_RESPONSE 로 명시(완료조건).
+          participantStatuses: participants.map((p) => ({
+            participantId: p.id,
+            status:
+              INTERVAL_CLASS_TO_WINDOW_STATUS[
+                classifyParticipant(p.id, window, statusByKey)
+              ],
+          })),
+        };
+      });
+
+    return {
+      meetingId,
+      participants: participantsOut,
+      slots: slotsOut,
+      recommendations: recommendationsOut,
     };
   }
 

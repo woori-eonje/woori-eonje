@@ -1,5 +1,7 @@
 import { AvailabilityStatus } from '@whenwe/types';
 import {
+  buildStatusMap,
+  classifyParticipant,
   computeRecommendations,
   type EngineInput,
   type EngineResponse,
@@ -245,5 +247,36 @@ describe('computeRecommendations', () => {
     const out = computeRecommendations(input);
     expect(out).toHaveLength(5);
     expect(out.map((o) => o.rank)).toEqual([1, 2, 3, 4, 5]);
+  });
+});
+
+// classifyParticipant 는 vote-details(참여자별 투표 상세)가 그대로 재사용하는
+// export 함수라, computeRecommendations 를 거치지 않고 직접 검증한다.
+describe('classifyParticipant', () => {
+  const window = hourlySlots(2); // id 1,2
+
+  it('구간 내 모든 슬롯이 가능이면 available', () => {
+    const statusByKey = buildStatusMap([resp(1, 1, A), resp(1, 2, A)]);
+    expect(classifyParticipant(1, window, statusByKey)).toBe('available');
+  });
+
+  it('응답한 슬롯 중 하나라도 불가면(나머지가 가능이어도) unavailable', () => {
+    const statusByKey = buildStatusMap([resp(1, 1, A), resp(1, 2, U)]);
+    expect(classifyParticipant(1, window, statusByKey)).toBe('unavailable');
+  });
+
+  it('불가는 없지만 하나라도 애매면 maybe', () => {
+    const statusByKey = buildStatusMap([resp(1, 1, A), resp(1, 2, M)]);
+    expect(classifyParticipant(1, window, statusByKey)).toBe('maybe');
+  });
+
+  it('구간 내 슬롯 하나라도 미응답이면 no_response(나머지가 전부 가능이어도)', () => {
+    const statusByKey = buildStatusMap([resp(1, 1, A)]); // slot 2 미응답
+    expect(classifyParticipant(1, window, statusByKey)).toBe('no_response');
+  });
+
+  it('아예 응답이 없으면 no_response', () => {
+    const statusByKey = buildStatusMap([]);
+    expect(classifyParticipant(1, window, statusByKey)).toBe('no_response');
   });
 });
