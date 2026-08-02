@@ -203,6 +203,11 @@ export function classifyParticipant(
   window: EngineSlot[],
   statusByKey: Map<string, AvailabilityStatus>,
 ): IntervalClass {
+  // window가 비어있으면 아래 루프가 한 번도 안 돌아 worst=AVAILABLE 그대로 반환된다 —
+  // "전원 가능"이라는 잘못된 결과를 침묵 반환하지 않도록 호출자 버그로 간주해 명시적으로 막는다.
+  if (window.length === 0) {
+    throw new Error('classifyParticipant: window must not be empty');
+  }
   let worst = AVAILABILITY_SCORE[AvailabilityStatus.AVAILABLE]; // 2 부터 시작해 최솟값 추적
   for (const slot of window) {
     const status = statusByKey.get(`${participantId}:${slot.id}`);

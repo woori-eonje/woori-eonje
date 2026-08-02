@@ -279,4 +279,11 @@ describe('classifyParticipant', () => {
     const statusByKey = buildStatusMap([]);
     expect(classifyParticipant(1, window, statusByKey)).toBe('no_response');
   });
+
+  it('window가 비어있으면 에러(전원 available로 침묵 반환 금지)', () => {
+    const statusByKey = buildStatusMap([]);
+    expect(() => classifyParticipant(1, [], statusByKey)).toThrow(
+      'classifyParticipant: window must not be empty',
+    );
+  });
 });
