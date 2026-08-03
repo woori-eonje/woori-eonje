@@ -6,6 +6,7 @@ import { Button, Logo } from "@/components/primitives";
 import { Calendar, ChevronRight } from "@/components/icons";
 import { ApiError, getToken } from "@/lib/api";
 import { getMe } from "@/lib/auth";
+import { getApiErrorMessage } from "@/lib/errors";
 import type { InviteVM } from "@/lib/invite";
 import {
   registerParticipant,
@@ -47,7 +48,9 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
     if (!getToken()) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoggedIn(true);
-    getMe().then((user) => setName(user.nickname)).catch(() => {});
+    getMe()
+      .then((user) => setName(user.nickname))
+      .catch((e) => setError(getApiErrorMessage(e, "회원 정보를 불러오지 못했어요. 페이지를 새로고침해 주세요.")));
   }, []);
 
   const handleStart = async () => {
