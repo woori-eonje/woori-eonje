@@ -274,6 +274,9 @@ export class InvitesService {
 
     const pinOk = await compare(pin, participant.pinHash);
     if (!pinOk) {
+      // 두 번의 update 로 분리: 잠금 여부 판단에는 DB 가 원자적으로 증가시킨 결과값
+      // (updated.pinFailedAttempts)이 필요하다 — 동시 요청 경합 시 update 이전에
+      // 읽어둔 participant.pinFailedAttempts + 1 은 최신 값이 아닐 수 있기 때문이다.
       const updated = await this.prisma.participant.update({
         where: { id: participant.id },
         data: { pinFailedAttempts: { increment: 1 } },

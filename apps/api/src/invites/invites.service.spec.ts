@@ -319,6 +319,23 @@ describe('InvitesService.participantSession', () => {
     ).rejects.toMatchObject({ code: 'PARTICIPANT_LOGIN_RATE_LIMITED' });
   });
 
+  it('잠금 시간이 지났으면 정답 PIN 재시도가 정상 처리된다', async () => {
+    const participant = await makeParticipant({
+      pinFailedAttempts: 5,
+      pinLockedUntil: new Date(Date.now() - 1000), // 이미 만료된 잠금
+    });
+    const rows = [participant];
+    const prisma = makeInvitesFakePrisma(meeting, rows);
+    const service = new InvitesService(prisma, fakeJwtService);
+
+    await expect(
+      service.participantSession('invite-1', {
+        guestName: '민수',
+        pin: '1234',
+      }),
+    ).resolves.toMatchObject({ participantId: 1 });
+  });
+
   it('정답이면 participantEditToken을 반환하고 실패 카운터를 초기화한다', async () => {
     const participant = await makeParticipant({ pinFailedAttempts: 2 });
     const rows = [participant];
