@@ -63,6 +63,9 @@ export const ErrorCode = {
   MEETING_NOT_EDITABLE: 'MEETING_NOT_EDITABLE',
   PARTICIPANT_NOT_FOUND: 'PARTICIPANT_NOT_FOUND',
   PARTICIPANT_EDIT_TOKEN_INVALID: 'PARTICIPANT_EDIT_TOKEN_INVALID',
+  PARTICIPANT_NICKNAME_TAKEN: 'PARTICIPANT_NICKNAME_TAKEN',
+  INVALID_PARTICIPANT_CREDENTIALS: 'INVALID_PARTICIPANT_CREDENTIALS',
+  PARTICIPANT_LOGIN_RATE_LIMITED: 'PARTICIPANT_LOGIN_RATE_LIMITED',
   FORBIDDEN_MEETING_OWNER_ONLY: 'FORBIDDEN_MEETING_OWNER_ONLY',
   RECOMMENDATION_NOT_READY: 'RECOMMENDATION_NOT_READY',
   MEETING_NOT_CONFIRMED: 'MEETING_NOT_CONFIRMED',
@@ -247,6 +250,8 @@ export interface InvitePublic {
 // ── API DTO: 비회원 참여자 등록 (POST /api/invites/{inviteToken}/participants)
 export interface RegisterParticipantRequest {
   guestName: string;
+  /** 비회원(GUEST) 등록 시 필수 — 숫자 4자리. 회원(Bearer) 등록에는 불필요. */
+  pin?: string;
 }
 
 export interface ParticipantRegistered {
@@ -257,6 +262,18 @@ export interface ParticipantRegistered {
    * 회원(MEMBER, Bearer 로 참여)은 JWT 로 본인 응답을 식별하므로 null.
    */
   participantEditToken: string | null;
+}
+
+export interface ParticipantSessionRequest {
+  guestName: string;
+  pin: string;
+}
+
+export interface ParticipantSessionResult {
+  participantId: number;
+  guestName: string;
+  /** 비회원 세션은 항상 비어있지 않은 문자열(레거시 토큰 재사용 또는 그대로 유지). */
+  participantEditToken: string;
 }
 
 // ── API DTO: 참여자 (PATCH /api/meetings/{meetingId}/participants/{participantId})
