@@ -728,6 +728,8 @@ paths:
                         properties:
                           saved: { type: boolean }
                           updatedRecommendation: { type: boolean }
+        '400':
+          $ref: '#/components/responses/Error'
         '401':
           $ref: '#/components/responses/Error'
         '409':
@@ -898,6 +900,7 @@ components:
         - INVITE_TOKEN_INVALID
         - INVITE_TOKEN_EXPIRED
         - RESPONSE_DEADLINE_PASSED
+        - AVAILABILITY_REQUIRED
         - MEETING_ALREADY_CONFIRMED
         - RESPONSE_ALREADY_EXISTS
         - MEETING_NOT_EDITABLE
@@ -1126,6 +1129,7 @@ components:
         participantId: { type: integer }
         items:
           type: array
+          minItems: 1
           items: { $ref: '#/components/schemas/AvailabilityItem' }
     MyAvailability:
       type: object
