@@ -226,3 +226,144 @@ describe('InvitesService.registerParticipant — 비회원 PIN', () => {
     ).resolves.toMatchObject({ guestName: '민수' });
   });
 });
+
+describe('InvitesService.participantSession', () => {
+  const meeting: FakeMeetingRow = {
+    id: 1,
+    inviteToken: 'invite-1',
+    inviteTokenExpiresAt: null,
+    status: 'COLLECTING',
+  };
+
+  async function makeParticipant(
+    overrides: Partial<FakeParticipantRow> = {},
+  ): Promise<FakeParticipantRow> {
+    return {
+      id: 1,
+      meetingId: 1,
+      userId: null,
+      guestName: '민수',
+      normalizedGuestName: '민수',
+      participantType: 'GUEST',
+      editToken: 'edit-token-abc',
+      pinHash: await hash('1234', 10),
+      pinFailedAttempts: 0,
+      pinLockedUntil: null,
+      ...overrides,
+    };
+  }
+
+  it('존재하지 않는 닉네임이면 401(INVALID_PARTICIPANT_CREDENTIALS)을 던진다', async () => {
+    const prisma = makeInvitesFakePrisma(meeting, []);
+    const service = new InvitesService(prisma, fakeJwtService);
+
+    await expect(
+      service.participantSession('invite-1', {
+        guestName: '없는사람',
+        pin: '1234',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_PARTICIPANT_CREDENTIALS' });
+  });
+
+  it('PIN을 설정한 적 없는(레거시) 참여자는 401을 던진다', async () => {
+    const legacy = await makeParticipant({ pinHash: null });
+    const prisma = makeInvitesFakePrisma(meeting, [legacy]);
+    const service = new InvitesService(prisma, fakeJwtService);
+
+    await expect(
+      service.participantSession('invite-1', {
+        guestName: '민수',
+        pin: '1234',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_PARTICIPANT_CREDENTIALS' });
+  });
+
+  it('PIN이 틀리면 401을 던지고 실패 횟수를 늘린다', async () => {
+    const participant = await makeParticipant();
+    const rows = [participant];
+    const prisma = makeInvitesFakePrisma(meeting, rows);
+    const service = new InvitesService(prisma, fakeJwtService);
+
+    await expect(
+      service.participantSession('invite-1', {
+        guestName: '민수',
+        pin: '0000',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_PARTICIPANT_CREDENTIALS' });
+    expect(rows[0].pinFailedAttempts).toBe(1);
+  });
+
+  it('5회 연속 실패하면 잠기고, 이후 정답이어도 429(PARTICIPANT_LOGIN_RATE_LIMITED)를 던진다', async () => {
+    const participant = await makeParticipant();
+    const rows = [participant];
+    const prisma = makeInvitesFakePrisma(meeting, rows);
+    const service = new InvitesService(prisma, fakeJwtService);
+
+    for (let i = 0; i < 5; i++) {
+      await expect(
+        service.participantSession('invite-1', {
+          guestName: '민수',
+          pin: '0000',
+        }),
+      ).rejects.toMatchObject({ code: 'INVALID_PARTICIPANT_CREDENTIALS' });
+    }
+    expect(rows[0].pinFailedAttempts).toBe(5);
+    expect(rows[0].pinLockedUntil).not.toBeNull();
+
+    // 잠긴 상태에서는 정답 PIN 을 넣어도 429.
+    await expect(
+      service.participantSession('invite-1', {
+        guestName: '민수',
+        pin: '1234',
+      }),
+    ).rejects.toMatchObject({ code: 'PARTICIPANT_LOGIN_RATE_LIMITED' });
+  });
+
+  it('정답이면 participantEditToken을 반환하고 실패 카운터를 초기화한다', async () => {
+    const participant = await makeParticipant({ pinFailedAttempts: 2 });
+    const rows = [participant];
+    const prisma = makeInvitesFakePrisma(meeting, rows);
+    const service = new InvitesService(prisma, fakeJwtService);
+
+    const result = await service.participantSession('invite-1', {
+      guestName: '  민수  ', // 정규화 대소문자/공백 차이도 매칭돼야 함
+      pin: '1234',
+    });
+
+    expect(result).toEqual({
+      participantId: 1,
+      guestName: '민수',
+      participantEditToken: 'edit-token-abc',
+    });
+    expect(rows[0].pinFailedAttempts).toBe(0);
+    expect(rows[0].pinLockedUntil).toBeNull();
+  });
+
+  it('만료된 초대 토큰이면 410을 던진다', async () => {
+    const expired: FakeMeetingRow = {
+      ...meeting,
+      inviteTokenExpiresAt: new Date(Date.now() - 1000),
+    };
+    const prisma = makeInvitesFakePrisma(expired, []);
+    const service = new InvitesService(prisma, fakeJwtService);
+
+    await expect(
+      service.participantSession('invite-1', {
+        guestName: '민수',
+        pin: '1234',
+      }),
+    ).rejects.toMatchObject({ code: 'INVITE_TOKEN_EXPIRED' });
+  });
+
+  it('존재하지 않는 초대 토큰이면 404를 던진다', async () => {
+    const prisma = makeInvitesFakePrisma(null, []);
+    const service = new InvitesService(prisma, fakeJwtService);
+
+    await expect(
+      service.participantSession('no-such-token', {
+        guestName: '민수',
+        pin: '1234',
+      }),
+    ).rejects.toMatchObject({ code: 'INVITE_TOKEN_INVALID' });
+  });
+});

@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { hash } from 'bcryptjs';
+import { compare, hash, hashSync } from 'bcryptjs';
 import {
   ErrorCode,
   type InvitePublic,
   type ParticipantRegistered,
+  type ParticipantSessionRequest,
+  type ParticipantSessionResult,
   type RegisterParticipantRequest,
 } from '@whenwe/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,6 +17,11 @@ import { normalizeNickname } from './nickname';
 
 const PIN_PATTERN = /^\d{4}$/;
 const PIN_BCRYPT_ROUNDS = 10; // auth.service.ts 의 BCRYPT_ROUNDS 와 동일 정책.
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCK_DURATION_MS = 10 * 60 * 1000; // 10분
+// 존재하지 않는 닉네임/PIN 미설정 참여자에 대해서도 동일 시간이 걸리도록 더미 비교를 수행
+// (auth.service.ts 의 DUMMY_PASSWORD_HASH 와 같은 타이밍 사이드채널 방지 패턴).
+const DUMMY_PIN_HASH = hashSync('0000', PIN_BCRYPT_ROUNDS);
 
 @Injectable()
 export class InvitesService {
@@ -211,6 +218,92 @@ export class InvitesService {
     }
   }
 
+  // POST /api/invites/:inviteToken/participants/session — 비회원 닉네임+PIN 재접속.
+  // 신규 비회원(PIN 설정됨)만 대상 — 레거시 비회원(pinHash=null)은 기존 edit token 으로만 접근.
+  // 브루트포스 방어: (1) 이 메서드의 실패 카운터+잠금(초대+닉네임 단위),
+  // (2) 컨트롤러의 ParticipantSessionThrottlerGuard(IP 단위) — 둘 다 필수.
+  async participantSession(
+    inviteToken: string,
+    body: ParticipantSessionRequest,
+  ): Promise<ParticipantSessionResult> {
+    const guestName = body?.guestName?.trim();
+    const pin = body?.pin;
+    if (!guestName || typeof pin !== 'string') {
+      throw this.invalidParticipantCredentials();
+    }
+
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { inviteToken },
+    });
+    if (!meeting) {
+      throw new DomainException(
+        ErrorCode.INVITE_TOKEN_INVALID,
+        HttpStatus.NOT_FOUND,
+        '유효하지 않은 초대 링크입니다.',
+      );
+    }
+    if (
+      meeting.inviteTokenExpiresAt &&
+      meeting.inviteTokenExpiresAt.getTime() <= Date.now()
+    ) {
+      throw new DomainException(
+        ErrorCode.INVITE_TOKEN_EXPIRED,
+        HttpStatus.GONE,
+        '만료된 초대 링크입니다.',
+      );
+    }
+
+    const normalizedGuestName = normalizeNickname(guestName);
+    const participant = await this.prisma.participant.findFirst({
+      where: { meetingId: meeting.id, normalizedGuestName },
+    });
+
+    // 존재하지 않거나 PIN 을 설정한 적 없는(레거시) 참여자 — 닉네임 존재 여부를 드러내지
+    // 않도록 동일한 401 로 응답한다. 더미 해시로도 compare 를 수행해 타이밍을 맞춘다.
+    if (!participant || !participant.pinHash) {
+      await compare(pin, DUMMY_PIN_HASH);
+      throw this.invalidParticipantCredentials();
+    }
+
+    if (
+      participant.pinLockedUntil &&
+      participant.pinLockedUntil.getTime() > Date.now()
+    ) {
+      throw this.participantLoginRateLimited();
+    }
+
+    const pinOk = await compare(pin, participant.pinHash);
+    if (!pinOk) {
+      const updated = await this.prisma.participant.update({
+        where: { id: participant.id },
+        data: { pinFailedAttempts: { increment: 1 } },
+        select: { pinFailedAttempts: true },
+      });
+      if (updated.pinFailedAttempts >= PIN_MAX_ATTEMPTS) {
+        await this.prisma.participant.update({
+          where: { id: participant.id },
+          data: {
+            pinLockedUntil: new Date(Date.now() + PIN_LOCK_DURATION_MS),
+          },
+        });
+      }
+      throw this.invalidParticipantCredentials();
+    }
+
+    // 성공 — 실패 카운터 초기화. editToken 은 회전시키지 않고 기존 값을 그대로 재사용한다
+    // (매 로그인마다 다른 기기의 토큰을 무효화할 이유가 없다).
+    await this.prisma.participant.update({
+      where: { id: participant.id },
+      data: { pinFailedAttempts: 0, pinLockedUntil: null },
+    });
+
+    return {
+      participantId: participant.id,
+      guestName: participant.guestName,
+      participantEditToken: participant.editToken!,
+    };
+  }
+
   private nicknameTaken(): DomainException {
     return new DomainException(
       ErrorCode.PARTICIPANT_NICKNAME_TAKEN,
@@ -226,6 +319,22 @@ export class InvitesService {
       e !== null &&
       'code' in e &&
       (e as { code?: unknown }).code === 'P2002'
+    );
+  }
+
+  private invalidParticipantCredentials(): DomainException {
+    return new DomainException(
+      ErrorCode.INVALID_PARTICIPANT_CREDENTIALS,
+      HttpStatus.UNAUTHORIZED,
+      '닉네임 또는 참여 PIN을 확인해 주세요.',
+    );
+  }
+
+  private participantLoginRateLimited(): DomainException {
+    return new DomainException(
+      ErrorCode.PARTICIPANT_LOGIN_RATE_LIMITED,
+      HttpStatus.TOO_MANY_REQUESTS,
+      '잠시 후 다시 시도해 주세요.',
     );
   }
 }
