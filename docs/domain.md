@@ -5,7 +5,7 @@
 ## 핵심 도메인 로직 (구현 시 정확히 따를 것)
 
 ### 추천 계산
-- 시간 슬롯 단위는 **1시간**, 조율 기간 **최대 14일**.
+- 시간 슬롯 단위는 **1시간**, 조율 기간 **최대 30일**.
 - 응답 점수: **가능=2, 애매=1, 불가=0** (`AVAILABILITY_SCORE` in `@whenwe/types`).
 - 예상 소요 시간이 N시간이면 **연속된 N개 슬롯**을 묶어 후보 구간 생성.
 - **추천 우선순위(8단계 안정 정렬)**: ①필수참석자 전원 가능 → ②연속 구간 내 최소 가능 인원 多 → ③평균 점수 高 → ④불가 인원 少 → ⑤애매 인원 少 → ⑥미응답자 少 → ⑦빠른 날짜 → ⑧생성 순서(id/start_at 오름차순). 8단계까지 동일하면 항상 같은 결과를 반환(결정론적).
@@ -17,7 +17,8 @@
 ### 비회원 참여 & 토큰 (두 토큰을 혼동하지 말 것)
 - `invite_token`: 모임 **접근**용. UUID/랜덤. 기본 만료 = 응답 마감일. 재발급 시 기존 토큰 비활성화.
 - `participant_edit_token`: 비회원 참여자의 **내 응답 수정**용. 클라이언트(localStorage)에 저장.
-- 식별은 닉네임이 아니라 `participant_id + edit_token` 기준. **동일 닉네임 허용**, 닉네임으로 덮어쓰지 않음. edit token 없으면 새 참여자로 등록.
+- 식별은 기본적으로 닉네임이 아니라 `participant_id + edit_token` 기준. **동일 닉네임 허용**, 닉네임으로 덮어쓰지 않음. edit token 없으면 새 참여자로 등록.
+- **예외(참여 PIN 재접속, ADR `0001`)**: 신규 비회원 등록부터는 모임 내 정규화 닉네임이 유일해야 하며(`participants.normalized_guest_name` unique), 닉네임+PIN(`POST /api/invites/{inviteToken}/participants/session`)으로 기존 edit_token 을 재발급받을 수 있다. 레거시 비회원(PIN 미설정)은 계속 edit_token 방식만 사용한다.
 
 ### 모임 상태머신
 `DRAFT → COLLECTING → READY_TO_CONFIRM → CONFIRMED → CLOSED` (`MeetingStatus` in `@whenwe/types`)

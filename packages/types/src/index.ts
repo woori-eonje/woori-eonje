@@ -58,10 +58,15 @@ export const ErrorCode = {
   INVITE_TOKEN_INVALID: 'INVITE_TOKEN_INVALID',
   INVITE_TOKEN_EXPIRED: 'INVITE_TOKEN_EXPIRED',
   RESPONSE_DEADLINE_PASSED: 'RESPONSE_DEADLINE_PASSED',
+  AVAILABILITY_REQUIRED: 'AVAILABILITY_REQUIRED',
   MEETING_ALREADY_CONFIRMED: 'MEETING_ALREADY_CONFIRMED',
   RESPONSE_ALREADY_EXISTS: 'RESPONSE_ALREADY_EXISTS',
   MEETING_NOT_EDITABLE: 'MEETING_NOT_EDITABLE',
+  PARTICIPANT_NOT_FOUND: 'PARTICIPANT_NOT_FOUND',
   PARTICIPANT_EDIT_TOKEN_INVALID: 'PARTICIPANT_EDIT_TOKEN_INVALID',
+  PARTICIPANT_NICKNAME_TAKEN: 'PARTICIPANT_NICKNAME_TAKEN',
+  INVALID_PARTICIPANT_CREDENTIALS: 'INVALID_PARTICIPANT_CREDENTIALS',
+  PARTICIPANT_LOGIN_RATE_LIMITED: 'PARTICIPANT_LOGIN_RATE_LIMITED',
   FORBIDDEN_MEETING_OWNER_ONLY: 'FORBIDDEN_MEETING_OWNER_ONLY',
   RECOMMENDATION_NOT_READY: 'RECOMMENDATION_NOT_READY',
   MEETING_NOT_CONFIRMED: 'MEETING_NOT_CONFIRMED',
@@ -69,6 +74,7 @@ export const ErrorCode = {
   EMAIL_ALREADY_EXISTS: 'EMAIL_ALREADY_EXISTS',
   INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
   UNAUTHENTICATED: 'UNAUTHENTICATED',
+  PASSWORD_RESET_TOKEN_INVALID: 'PASSWORD_RESET_TOKEN_INVALID',
   // ── 공통(입력 검증 실패 / 미분류 서버 오류) ──
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
@@ -125,6 +131,23 @@ export interface LoginResult {
   user: AuthUser;
 }
 
+export interface ForgotPasswordRequest {
+  /** format: email */
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  /** 메일 링크의 원본 토큰 */
+  token: string;
+  /** 8~72자 */
+  newPassword: string;
+}
+
+export interface WithdrawRequest {
+  /** 현재 비밀번호 재확인 */
+  password: string;
+}
+
 // ── API DTO: 모임 생성 (POST /api/meetings) ────────────────────
 // openapi.yaml 의 CreateMeetingRequest/MeetingCreated 스키마와 일치. FE·BE 공유.
 export interface CreateMeetingRequest {
@@ -133,7 +156,7 @@ export interface CreateMeetingRequest {
   /** ~500자, 없으면 null */
   description?: string | null;
   category: MeetingCategory;
-  /** YYYY-MM-DD (기간은 최대 14일) */
+  /** YYYY-MM-DD (기간은 최대 30일) */
   startDate: string;
   /** YYYY-MM-DD */
   endDate: string;
@@ -228,6 +251,8 @@ export interface InvitePublic {
 // ── API DTO: 비회원 참여자 등록 (POST /api/invites/{inviteToken}/participants)
 export interface RegisterParticipantRequest {
   guestName: string;
+  /** 비회원(GUEST) 등록 시 필수 — 숫자 4자리. 회원(Bearer) 등록에는 불필요. */
+  pin?: string;
 }
 
 export interface ParticipantRegistered {
@@ -238,6 +263,18 @@ export interface ParticipantRegistered {
    * 회원(MEMBER, Bearer 로 참여)은 JWT 로 본인 응답을 식별하므로 null.
    */
   participantEditToken: string | null;
+}
+
+export interface ParticipantSessionRequest {
+  guestName: string;
+  pin: string;
+}
+
+export interface ParticipantSessionResult {
+  participantId: number;
+  guestName: string;
+  /** 비회원 세션은 항상 비어있지 않은 문자열(레거시 토큰 재사용 또는 그대로 유지). */
+  participantEditToken: string;
 }
 
 // ── API DTO: 참여자 (PATCH /api/meetings/{meetingId}/participants/{participantId})
@@ -357,6 +394,47 @@ export interface Recommendation {
 export interface RecommendationsResponse {
   meetingId: number;
   recommendations: Recommendation[];
+}
+
+// ── API DTO: 참여자별 투표 상세 (GET /api/meetings/{meetingId}/vote-details) ──
+// openapi.yaml 의 VoteDetailsResponse 스키마와 일치. FE·BE 공유. 모임장 전용.
+// 추천 구간 상태는 AvailabilityStatus(가능/애매/불가) 에 없는 미응답(NO_RESPONSE)을
+// 포함해야 해서 별도 유니온으로 둔다.
+export const ParticipantWindowStatus = {
+  AVAILABLE: 'AVAILABLE',
+  MAYBE: 'MAYBE',
+  UNAVAILABLE: 'UNAVAILABLE',
+  NO_RESPONSE: 'NO_RESPONSE',
+} as const;
+export type ParticipantWindowStatus =
+  (typeof ParticipantWindowStatus)[keyof typeof ParticipantWindowStatus];
+
+export interface SlotVoteDetail {
+  slotId: number;
+  /** ISO 8601 date-time */
+  startAt: string;
+  /** ISO 8601 date-time */
+  endAt: string;
+  /** 이 슬롯에 응답을 남긴 참여자만 포함(미응답자는 없음) — aggregate 카운트와 합이 같다. */
+  votes: Array<{ participantId: number; status: AvailabilityStatus }>;
+}
+
+export interface RecommendationParticipantDetail {
+  recommendationId: number;
+  /** 전체 참여자 포함 — 미응답자도 NO_RESPONSE 로 명시된다. */
+  participantStatuses: Array<{
+    participantId: number;
+    status: ParticipantWindowStatus;
+  }>;
+}
+
+export interface VoteDetailsResponse {
+  meetingId: number;
+  /** createdAt 오름차순 */
+  participants: ParticipantWithStatus[];
+  /** slotStartAt 오름차순 */
+  slots: SlotVoteDetail[];
+  recommendations: RecommendationParticipantDetail[];
 }
 
 // ── API DTO: 일정 확정 (POST /api/meetings/{meetingId}/confirm) ──

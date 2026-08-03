@@ -8,9 +8,10 @@ import { ko } from "date-fns/locale";
 import { Logo, Button } from "@/components/primitives";
 import { MeetingActions } from "@/components/meeting/MeetingActions";
 import { Check, Clock, PlusCircle, Copy } from "@/components/icons";
-import { getMeeting, getRecommendations, confirmMeeting, getAggregate, listParticipants, setParticipantRequired } from "@/lib/meetings";
+import { getMeeting, getRecommendations, confirmMeeting, getAggregate, getVoteDetails, listParticipants, setParticipantRequired, deleteParticipant } from "@/lib/meetings";
 import { ApiError, getToken } from "@/lib/api";
-import type { MeetingDetail, Recommendation as ApiRec, SlotAggregate, ParticipantWithStatus } from "@whenwe/types";
+import { getApiErrorMessage } from "@/lib/errors";
+import type { AvailabilityStatus, MeetingDetail, ParticipantWindowStatus, Recommendation as ApiRec, SlotAggregate, ParticipantWithStatus, VoteDetailsResponse } from "@whenwe/types";
 
 const TZ = "Asia/Seoul";
 const CATEGORY_LABEL: Record<string, string> = {
@@ -36,6 +37,43 @@ function cellBg(ok: number) {
 }
 
 type Tab = "aggregate" | "recommendations";
+
+const DETAIL_STATUS = [
+  { key: "AVAILABLE", label: "가능", color: "var(--color-primary)", bg: "var(--color-primary-soft)" },
+  { key: "MAYBE", label: "애매", color: "var(--color-maybe-text)", bg: "var(--color-maybe-soft)" },
+  { key: "UNAVAILABLE", label: "불가", color: "var(--color-text-2)", bg: "var(--color-bg-2)" },
+  { key: "NO_RESPONSE", label: "미응답", color: "var(--color-text-muted)", bg: "var(--color-bg-2)" },
+] as const;
+
+function ParticipantStatusDetails({
+  statuses,
+  details,
+}: {
+  statuses: Array<{ participantId: number; status: ParticipantWindowStatus | AvailabilityStatus }>;
+  details: VoteDetailsResponse;
+}) {
+  const names = new Map(details.participants.map((participant) => [participant.participantId, participant]));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+      {DETAIL_STATUS.map(({ key, label, color, bg }) => {
+        const people = statuses.filter((item) => item.status === key).map((item) => names.get(item.participantId)).filter(Boolean);
+        if (people.length === 0) return null;
+        return (
+          <div key={key}>
+            <div style={{ fontSize: 11, fontWeight: 800, color, marginBottom: 5 }}>{label} {people.length}명</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {people.map((person) => person && (
+                <span key={person.participantId} style={{ padding: "4px 8px", borderRadius: 999, background: bg, color, fontSize: 11, fontWeight: 700 }}>
+                  {person.guestName}{person.isRequired ? " · 필수" : ""}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════════════════
    앱 헤더
@@ -141,10 +179,17 @@ function AppHeader() {
 ══════════════════════════════════════════════════════ */
 function MeetingHero({ meeting, onUpdated }: { meeting: MeetingDetail | null; onUpdated?: (m: MeetingDetail) => void }) {
   const [copied, setCopied] = useState(false);
-  const handleCopy = () => {
-    if (meeting?.inviteUrl) navigator.clipboard.writeText(meeting.inviteUrl).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const handleCopy = async () => {
+    if (!meeting?.inviteUrl) return;
+    setCopyError(null);
+    try {
+      await navigator.clipboard.writeText(meeting.inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError("링크를 복사하지 못했어요.");
+    }
   };
 
   const startD = meeting ? new Date(meeting.startDate) : null;
@@ -234,6 +279,7 @@ function MeetingHero({ meeting, onUpdated }: { meeting: MeetingDetail | null; on
           <Copy size={15} color="var(--color-primary)" /> {copied ? "복사됨!" : "링크 복사"}
         </button>
         {meeting && <MeetingActions meeting={meeting} onUpdated={onUpdated} />}
+        {copyError && <span role="alert" className="t-cap" style={{ color: "var(--color-error)", width: "100%" }}>{copyError}</span>}
       </div>
     </div>
   );
@@ -282,11 +328,14 @@ function PageTabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 /* ══════════════════════════════════════════════════════
    응답 현황 탭 — 히트맵
 ══════════════════════════════════════════════════════ */
-function AggregateTab({ slots, meeting, error, onRetry }: {
+function AggregateTab({ slots, meeting, voteDetails, voteDetailsError, error, onRetry, onVoteDetailsRetry }: {
   slots: SlotAggregate[] | null;
   meeting: MeetingDetail | null;
+  voteDetails: VoteDetailsResponse | null;
+  voteDetailsError: boolean;
   error: boolean;
   onRetry: () => void;
+  onVoteDetailsRetry: () => void;
 }) {
   // 슬롯(실데이터)에서 날짜·시간 격자와 셀 맵을 KST 기준으로 동적 생성.
   // (hook 은 조건부 return 보다 위에 있어야 하므로 slots 가 null 이어도 안전하게 [] 로 처리)
@@ -328,6 +377,9 @@ function AggregateTab({ slots, meeting, error, onRetry }: {
   const pickedData = activeKey ? cellMap.get(activeKey) ?? null : null;
   const [pickedDay, pickedHour] = activeKey ? activeKey.split("_") : ["", ""];
   const pickedWeekday = days.find((d) => d.id === pickedDay)?.weekday ?? "";
+  const pickedVotes = pickedData
+    ? voteDetails?.slots.find((slot) => slot.slotId === pickedData.slotId)?.votes ?? []
+    : [];
 
   const respondedCount = meeting?.respondedCount ?? 0;
   const participantCount = meeting?.participantCount ?? 0;
@@ -364,7 +416,7 @@ function AggregateTab({ slots, meeting, error, onRetry }: {
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 340px", gap: 24, alignItems: "start" }}>
+    <div className="dashboard-grid">
       {/* 히트맵 */}
       <div className="card" style={{ padding: 28, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap" as const, gap: 12 }}>
@@ -476,6 +528,14 @@ function AggregateTab({ slots, meeting, error, onRetry }: {
                   <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>불가</span>
                 </span>
               </div>
+              {voteDetails && <ParticipantStatusDetails statuses={pickedVotes} details={voteDetails} />}
+              {!voteDetails && !voteDetailsError && <div className="skeleton" style={{ height: 56, borderRadius: 8, marginTop: 14 }} />}
+              {voteDetailsError && (
+                <div style={{ marginTop: 14 }}>
+                  <p role="alert" className="t-cap" style={{ marginBottom: 8 }}>참여자 상세를 불러오지 못했어요.</p>
+                  <Button onClick={onVoteDetailsRetry}>다시 시도</Button>
+                </div>
+              )}
             </>
           ) : (
             <p className="t-body2">히트맵에서 시간을 누르면 상세 정보가 보여요.</p>
@@ -509,22 +569,34 @@ function AggregateTab({ slots, meeting, error, onRetry }: {
 function RequiredParticipantsPanel({
   meetingId,
   onRecommendationsChanged,
+  onParticipantsChanged,
 }: {
   meetingId: number;
   onRecommendationsChanged: () => void;
+  onParticipantsChanged: () => void;
 }) {
   const [participants, setParticipants] = useState<ParticipantWithStatus[] | null>(null);
   const [toggling, setToggling] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ParticipantWithStatus | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [participantsError, setParticipantsError] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchParticipants = useCallback(() => {
     listParticipants(meetingId)
       .then((res) => setParticipants(res.participants))
-      .catch(() => setParticipants([]));
+      .catch((error) => setParticipantsError(getApiErrorMessage(error, "참여자 목록을 불러오지 못했어요.")));
   }, [meetingId]);
+
+  useEffect(() => {
+    fetchParticipants();
+  }, [fetchParticipants]);
 
   const handleToggle = async (p: ParticipantWithStatus) => {
     if (toggling !== null) return;
     setToggling(p.participantId);
+    setToggleError(null);
     try {
       const updated = await setParticipantRequired(meetingId, p.participantId, !p.isRequired);
       setParticipants((prev) =>
@@ -533,12 +605,38 @@ function RequiredParticipantsPanel({
         ) ?? prev,
       );
       onRecommendationsChanged();
-    } catch {
-      // 실패 시 상태 롤백 없이 조용히 무시 — 토글 UI가 원상태로 돌아옴
+    } catch (error) {
+      setToggleError(getApiErrorMessage(error, "필수 참석자 설정을 변경하지 못했어요."));
     } finally {
       setToggling(null);
     }
   };
+
+  const handleDelete = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteParticipant(meetingId, deleteTarget.participantId);
+      setParticipants((current) => current?.filter((p) => p.participantId !== deleteTarget.participantId) ?? current);
+      setDeleteTarget(null);
+      onRecommendationsChanged();
+      onParticipantsChanged();
+    } catch (error) {
+      setDeleteError(getApiErrorMessage(error, "참여자를 삭제하지 못했어요."));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  if (participantsError) {
+    return (
+      <div role="alert" className="card tight" style={{ padding: 22 }}>
+        <p className="t-body2" style={{ marginBottom: 10 }}>{participantsError}</p>
+        <Button onClick={() => { setParticipantsError(null); fetchParticipants(); }}>다시 시도</Button>
+      </div>
+    );
+  }
 
   if (participants === null) {
     return (
@@ -573,6 +671,7 @@ function RequiredParticipantsPanel({
       <p className="t-cap" style={{ marginBottom: 10, color: "var(--color-text-2)" }}>
         필수 지정 시 해당 참여자가 가능한 시간 위주로 추천돼요.
       </p>
+      {toggleError && <p role="alert" className="t-cap" style={{ color: "var(--color-error)", marginBottom: 10 }}>{toggleError}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {participants.map((p) => (
           <div
@@ -612,9 +711,30 @@ function RequiredParticipantsPanel({
             >
               {p.isRequired ? "필수 해제" : "필수 지정"}
             </button>
+            <button
+              type="button"
+              disabled={toggling !== null || deleting}
+              onClick={() => { setDeleteError(null); setDeleteTarget(p); }}
+              style={{ height: 28, padding: "0 8px", borderRadius: 999, border: "1px solid var(--color-line)", background: "#fff", color: "var(--color-error)", fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+            >
+              삭제
+            </button>
           </div>
         ))}
       </div>
+      {deleteTarget && (
+        <div role="dialog" aria-modal="true" aria-labelledby="participant-delete-title" onClick={() => !deleting && setDeleteTarget(null)} style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,0.42)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div onClick={(event) => event.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 360 }}>
+            <h3 id="participant-delete-title" className="t-h3">‘{deleteTarget.guestName}’ 참여자를 삭제할까요?</h3>
+            <p className="t-body2" style={{ marginTop: 8 }}>작성한 응답도 함께 삭제되며 되돌릴 수 없어요.</p>
+            {deleteError && <p role="alert" className="t-cap" style={{ color: "var(--color-error)", marginTop: 10 }}>{deleteError}</p>}
+            <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+              <Button block secondary disabled={deleting} onClick={() => setDeleteTarget(null)}>취소</Button>
+              <Button block danger disabled={deleting} onClick={handleDelete}>{deleting ? "삭제 중…" : "삭제"}</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -625,22 +745,47 @@ function RequiredParticipantsPanel({
 function RecommendationsTab({
   recs,
   meetingId,
+  voteDetails,
+  voteDetailsError,
+  error,
+  onRetry,
+  onVoteDetailsRetry,
   onConfirmed,
   onRecommendationsChanged,
+  onParticipantsChanged,
 }: {
-  recs: ApiRec[];
+  recs: ApiRec[] | null;
   meetingId: number;
+  voteDetails: VoteDetailsResponse | null;
+  voteDetailsError: boolean;
+  error: boolean;
+  onRetry: () => void;
+  onVoteDetailsRetry: () => void;
   onConfirmed: () => void;
   onRecommendationsChanged: () => void;
+  onParticipantsChanged: () => void;
 }) {
   const [selected, setSelected] = useState(1);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const router = useRouter();
 
+  if (error) {
+    return (
+      <div className="card" style={{ padding: 48, textAlign: "center" }}>
+        <p role="alert" className="t-body2" style={{ marginBottom: 14 }}>추천 결과를 불러오지 못했어요.</p>
+        <Button onClick={onRetry}>다시 시도</Button>
+      </div>
+    );
+  }
+
+  if (recs === null) {
+    return <div className="card skeleton" style={{ height: 240 }} aria-label="추천 결과 불러오는 중" />;
+  }
+
   if (recs.length === 0) {
     return (
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", gap: 24, alignItems: "start" }}>
+      <div className="recommendations-grid">
         <div className="card" style={{ padding: 48, textAlign: "center" }}>
           <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 800, letterSpacing: "-0.03em" }}>
             아직 추천 결과가 없어요
@@ -651,6 +796,7 @@ function RecommendationsTab({
           <RequiredParticipantsPanel
             meetingId={meetingId}
             onRecommendationsChanged={onRecommendationsChanged}
+            onParticipantsChanged={onParticipantsChanged}
           />
         </aside>
       </div>
@@ -658,9 +804,10 @@ function RecommendationsTab({
   }
 
   const rec = recs.find((r) => r.rank === selected) ?? recs[0];
+  const recommendationStatuses = voteDetails?.recommendations.find((item) => item.recommendationId === rec.recommendationId)?.participantStatuses ?? [];
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 380px", gap: 24, alignItems: "start" }}>
+    <div className="recommendations-grid">
       {/* LEFT */}
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {/* 히어로 카드 */}
@@ -699,6 +846,19 @@ function RecommendationsTab({
             </div>
           </div>
         </div>
+
+        {voteDetails && (
+          <div className="card tight" style={{ padding: 20 }}>
+            <h3 className="t-h3">이 시간의 참여자</h3>
+            <ParticipantStatusDetails statuses={recommendationStatuses} details={voteDetails} />
+          </div>
+        )}
+        {voteDetailsError && (
+          <div className="card tight" style={{ padding: 20 }}>
+            <p role="alert" className="t-body2" style={{ marginBottom: 10 }}>참여자 상세를 불러오지 못했어요.</p>
+            <Button onClick={onVoteDetailsRetry}>다시 시도</Button>
+          </div>
+        )}
 
         {/* 순위 목록 */}
         <div>
@@ -777,6 +937,7 @@ function RecommendationsTab({
         <RequiredParticipantsPanel
           meetingId={meetingId}
           onRecommendationsChanged={onRecommendationsChanged}
+          onParticipantsChanged={onParticipantsChanged}
         />
       </aside>
     </div>
@@ -792,16 +953,38 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
   const mid = Number(id);
   const [tab, setTab] = useState<Tab>("aggregate");
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
-  const [recs, setRecs] = useState<ApiRec[]>([]);
+  const [meetingError, setMeetingError] = useState<string | null>(null);
+  const [recs, setRecs] = useState<ApiRec[] | null>(null);
+  const [recsError, setRecsError] = useState(false);
   // null = 아직 로딩 중(빈 배열 = 슬롯 없음과 구분). aggError = fetch 실패.
   const [agg, setAgg] = useState<SlotAggregate[] | null>(null);
   const [aggError, setAggError] = useState(false);
+  const [voteDetails, setVoteDetails] = useState<VoteDetailsResponse | null>(null);
+  const [voteDetailsError, setVoteDetailsError] = useState(false);
 
-  const loadRecommendations = useCallback(() => {
+  const fetchMeeting = useCallback(() => {
+    getMeeting(mid)
+      .then(setMeeting)
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
+          router.replace(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+          return;
+        }
+        setMeetingError(getApiErrorMessage(e, "모임 정보를 불러오지 못했어요."));
+      });
+  }, [mid, router]);
+
+  const fetchRecommendations = useCallback(() => {
     getRecommendations(mid)
       .then((res) => setRecs(res.recommendations))
-      .catch(() => {});
+      .catch(() => setRecsError(true));
   }, [mid]);
+
+  const loadRecommendations = useCallback(() => {
+    setRecsError(false);
+    setRecs(null);
+    fetchRecommendations();
+  }, [fetchRecommendations]);
 
   // 조회만(상태 setter 는 .then/.catch 안 — effect 에서 동기 setState 회피).
   const fetchAggregate = useCallback(() => {
@@ -817,23 +1000,43 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
     fetchAggregate();
   }, [fetchAggregate]);
 
+  const fetchVoteDetails = useCallback(() => {
+    getVoteDetails(mid).then(setVoteDetails).catch(() => setVoteDetailsError(true));
+  }, [mid]);
+
+  const loadVoteDetails = useCallback(() => {
+    setVoteDetailsError(false);
+    setVoteDetails(null);
+    fetchVoteDetails();
+  }, [fetchVoteDetails]);
+
+  const refreshParticipantData = useCallback(() => {
+    fetchMeeting();
+    loadAggregate();
+    loadRecommendations();
+    loadVoteDetails();
+  }, [fetchMeeting, loadAggregate, loadRecommendations, loadVoteDetails]);
+
   useEffect(() => {
     if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
-    getMeeting(mid)
-      .then(setMeeting)
-      .catch((e: unknown) => {
-        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
-      });
-    loadRecommendations();
+    fetchMeeting();
+    fetchRecommendations();
     // 초기값이 이미 null(로딩) 이라 reset 없이 조회만 — effect 내 동기 setState 회피.
     fetchAggregate();
-  }, [mid, router, fetchAggregate, loadRecommendations]);
+    fetchVoteDetails();
+  }, [router, fetchMeeting, fetchAggregate, fetchRecommendations, fetchVoteDetails]);
 
   return (
     <div style={{ minHeight: "100dvh", background: "var(--color-bg)" }}>
       <AppHeader />
 
       <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 32px 96px" }}>
+        {meetingError && (
+          <div role="alert" className="card" style={{ textAlign: "center", marginBottom: 18 }}>
+            <p className="t-body2" style={{ marginBottom: 12 }}>{meetingError}</p>
+            <Button onClick={() => { setMeetingError(null); fetchMeeting(); }}>다시 시도</Button>
+          </div>
+        )}
         {/* 브레드크럼 */}
         <div style={{ fontSize: 13, color: "var(--color-text-2)", letterSpacing: "-0.01em", marginBottom: 18 }}>
           <Link href="/meetings" style={{ color: "var(--color-text-muted)", textDecoration: "none" }}>내 모임</Link>
@@ -848,13 +1051,19 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
         <PageTabs tab={tab} setTab={setTab} />
 
         {tab === "aggregate"
-          ? <AggregateTab slots={agg} meeting={meeting} error={aggError} onRetry={loadAggregate} />
+          ? <AggregateTab slots={agg} meeting={meeting} voteDetails={voteDetails} voteDetailsError={voteDetailsError} error={aggError} onRetry={loadAggregate} onVoteDetailsRetry={loadVoteDetails} />
           : (
               <RecommendationsTab
                 recs={recs}
                 meetingId={mid}
+                voteDetails={voteDetails}
+                voteDetailsError={voteDetailsError}
+                error={recsError}
+                onRetry={loadRecommendations}
+                onVoteDetailsRetry={loadVoteDetails}
                 onConfirmed={() => setRecs([])}
                 onRecommendationsChanged={loadRecommendations}
+                onParticipantsChanged={refreshParticipantData}
               />
             )}
       </main>

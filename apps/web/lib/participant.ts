@@ -2,6 +2,8 @@
 // 도메인: 참여자 식별은 닉네임이 아니라 participant_id + edit_token. edit_token 은 localStorage 에 보관.
 import type {
   ParticipantRegistered,
+  ParticipantSessionRequest,
+  ParticipantSessionResult,
   RegisterParticipantRequest,
 } from "@whenwe/types";
 import { apiPost, authPost } from "./api";
@@ -12,12 +14,39 @@ export function registerParticipant(
   token: string,
   guestName: string,
   useAuth = false,
+  pin?: string,
 ): Promise<ParticipantRegistered> {
-  const body: RegisterParticipantRequest = { guestName };
+  const body: RegisterParticipantRequest =
+    pin && !useAuth ? { guestName, pin } : { guestName };
   const path = `/api/invites/${encodeURIComponent(token)}/participants`;
   return useAuth
     ? authPost<ParticipantRegistered>(path, body)
     : apiPost<ParticipantRegistered>(path, body);
+}
+
+export function restoreParticipantSession(
+  token: string,
+  guestName: string,
+  pin: string,
+): Promise<ParticipantSessionResult> {
+  const body: ParticipantSessionRequest = { guestName, pin };
+  return apiPost<ParticipantSessionResult>(
+    `/api/invites/${encodeURIComponent(token)}/participants/session`,
+    body,
+  );
+}
+
+export function isValidGuestSession(
+  participant: ParticipantSessionResult | ParticipantRegistered,
+): participant is ParticipantSessionResult {
+  return (
+    Number.isInteger(participant.participantId)
+    && participant.participantId > 0
+    && typeof participant.guestName === "string"
+    && participant.guestName.trim().length > 0
+    && typeof participant.participantEditToken === "string"
+    && participant.participantEditToken.length > 0
+  );
 }
 
 export interface StoredParticipant {

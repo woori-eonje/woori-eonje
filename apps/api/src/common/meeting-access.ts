@@ -21,6 +21,14 @@ export function forbiddenMeetingOwnerOnly(): DomainException {
   );
 }
 
+export function participantNotFound(): DomainException {
+  return new DomainException(
+    ErrorCode.PARTICIPANT_NOT_FOUND,
+    HttpStatus.NOT_FOUND,
+    '참여자를 찾을 수 없습니다.',
+  );
+}
+
 /** 모임이 존재하고(404) 그 owner 가 userId 인지(403) 보장. 통과 시 meeting 은 non-null 로 좁혀진다. */
 export function assertMeetingOwner<T extends { ownerId: number }>(
   meeting: T | null,

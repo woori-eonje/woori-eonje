@@ -90,6 +90,16 @@ export class AvailabilityService {
     if (!Array.isArray(items)) {
       throw new BadRequestException('items 형식이 올바르지 않습니다.');
     }
+    // 빈 배열 제출 차단 — 프론트 검증과 무관하게 서버에서 강제한다. 이 체크를
+    // 아래 트랜잭션(삭제+upsert) 이전에 둬서, 빈 제출이 기존 응답을 지우거나
+    // 추천을 재계산하지 않고 즉시 거부되게 한다.
+    if (items.length < 1) {
+      throw new DomainException(
+        ErrorCode.AVAILABILITY_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+        '시간을 하나 이상 선택해 주세요.',
+      );
+    }
     const validStatuses = new Set<string>(Object.values(AvailabilityStatus));
     for (const item of items) {
       if (!Number.isInteger(item?.slotId) || !validStatuses.has(item?.status)) {
@@ -182,7 +192,11 @@ export class AvailabilityService {
     authHeader: string | undefined,
   ) {
     // 회원 경로: Bearer 가 유효하면 (userId, meetingId) 로 참여자 조회.
-    const userId = await resolveOptionalUserId(this.jwtService, authHeader);
+    const userId = await resolveOptionalUserId(
+      this.jwtService,
+      this.prisma,
+      authHeader,
+    );
     if (userId !== null) {
       const member = await this.prisma.participant.findUnique({
         where: { userId_meetingId: { userId, meetingId } },

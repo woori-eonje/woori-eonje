@@ -27,6 +27,7 @@ import type {
   ParticipantsResponse,
   SetParticipantRequiredRequest,
   UpdateMeetingRequest,
+  VoteDetailsResponse,
 } from '@whenwe/types';
 import {
   JwtAuthGuard,
@@ -106,6 +107,34 @@ export class MeetingsController {
     @Param('meetingId', ParseIntPipe) meetingId: number,
   ): Promise<AggregateResponse> {
     return this.meetingsService.getAggregate(meetingId, req.user.id);
+  }
+
+  // GET /api/meetings/:meetingId/vote-details — 참여자별 투표 상세 (JWT + 모임장 소유)
+  // 공개 초대 API에는 제공하지 않는다.
+  @Get(':meetingId/vote-details')
+  @UseGuards(JwtAuthGuard)
+  getVoteDetails(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+  ): Promise<VoteDetailsResponse> {
+    return this.meetingsService.getVoteDetails(meetingId, req.user.id);
+  }
+
+  // DELETE /api/meetings/:meetingId/participants/:participantId
+  // 참여자 삭제 (JWT 필요 + 모임장 소유). COLLECTING/READY_TO_CONFIRM 에서만 허용.
+  @Delete(':meetingId/participants/:participantId')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  deleteParticipant(
+    @Req() req: AuthenticatedRequest,
+    @Param('meetingId', ParseIntPipe) meetingId: number,
+    @Param('participantId', ParseIntPipe) participantId: number,
+  ): Promise<Record<string, never>> {
+    return this.meetingsService.deleteParticipant(
+      meetingId,
+      participantId,
+      req.user.id,
+    );
   }
 
   // PATCH /api/meetings/:meetingId/participants/:participantId

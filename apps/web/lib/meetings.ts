@@ -10,6 +10,7 @@ import type {
   UpdateMeetingRequest,
   ParticipantsResponse,
   Participant,
+  VoteDetailsResponse,
 } from "@whenwe/types";
 import { authGet, authPost, authPatch, authDelete } from "./api";
 
@@ -31,6 +32,10 @@ export function getRecommendations(meetingId: number): Promise<RecommendationsRe
 
 export function getAggregate(meetingId: number): Promise<AggregateResponse> {
   return authGet<AggregateResponse>(`/api/meetings/${meetingId}/aggregate`);
+}
+
+export function getVoteDetails(meetingId: number): Promise<VoteDetailsResponse> {
+  return authGet<VoteDetailsResponse>(`/api/meetings/${meetingId}/vote-details`);
 }
 
 export function updateMeeting(
@@ -60,5 +65,14 @@ export function setParticipantRequired(
   return authPatch<Participant>(
     `/api/meetings/${meetingId}/participants/${participantId}`,
     { isRequired },
+  );
+}
+
+export function deleteParticipant(
+  meetingId: number,
+  participantId: number,
+): Promise<Record<string, never>> {
+  return authDelete<Record<string, never>>(
+    `/api/meetings/${meetingId}/participants/${participantId}`,
   );
 }

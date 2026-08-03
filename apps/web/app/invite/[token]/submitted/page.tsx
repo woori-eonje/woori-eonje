@@ -1,11 +1,12 @@
 "use client";
 
-import { use, useState, useEffect, useMemo } from "react";
+import { use, useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar, Button } from "@/components/primitives";
 import { fetchInvite, toInviteVM, type InviteVM } from "@/lib/invite";
 import { loadParticipant } from "@/lib/participant";
 import { fetchMyPicks } from "@/lib/availability";
+import { getApiErrorMessage } from "@/lib/errors";
 import type { SlotState } from "@/types/meeting";
 
 function deadlineLeft(iso: string): string {
@@ -23,9 +24,9 @@ export default function SubmittedPage({ params }: { params: Promise<{ token: str
   const [picks, setPicks] = useState<Record<number, SlotState>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const p = loadParticipant(token);
-    if (!p) {
+  const fetchSummary = useCallback(() => {
+    const participant = loadParticipant(token);
+    if (!participant) {
       router.replace(`/invite/${token}`);
       return;
     }
@@ -33,13 +34,17 @@ export default function SubmittedPage({ params }: { params: Promise<{ token: str
       .then(async (dto) => {
         setVm(toInviteVM(dto));
         setResponseDeadline(dto.responseDeadline);
-        const myPicks = await fetchMyPicks(dto.meetingId, p.editToken);
+        const myPicks = await fetchMyPicks(dto.meetingId, participant.editToken);
         setPicks(myPicks);
       })
-      .catch(() => {
-        setLoadError("응답 요약을 불러오지 못했어요.");
+      .catch((error) => {
+        setLoadError(getApiErrorMessage(error, "응답 요약을 불러오지 못했어요."));
       });
   }, [token, router]);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
   const summary = useMemo(() => {
     let ok = 0, m = 0, x = 0;
@@ -101,6 +106,11 @@ export default function SubmittedPage({ params }: { params: Promise<{ token: str
                 ? `가능 ${summary.ok}개 · 애매 ${summary.m}개 · 불가 ${summary.x}개`
                 : "불러오는 중…"}
           </div>
+          {loadError && (
+            <Button onClick={() => { setLoadError(null); fetchSummary(); }}>
+              다시 시도
+            </Button>
+          )}
           {responseDeadline && (
             <div className="t-cap">
               마감까지 <b style={{ color: "var(--color-primary)" }}>{deadlineLeft(responseDeadline)}</b> 남았어요

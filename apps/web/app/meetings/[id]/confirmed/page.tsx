@@ -1,14 +1,15 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
 import { TopBar, Button, StatusPill } from "@/components/primitives";
 import { Calendar, Share } from "@/components/icons";
-import { getMeeting, listParticipants } from "@/lib/meetings";
+import { getMeeting, getRecommendations, getVoteDetails, listParticipants } from "@/lib/meetings";
 import { ApiError, getToken } from "@/lib/api";
-import type { MeetingDetail, ParticipantWithStatus } from "@whenwe/types";
+import { getApiErrorMessage } from "@/lib/errors";
+import type { MeetingDetail, ParticipantWindowStatus, ParticipantWithStatus } from "@whenwe/types";
 
 const TZ = "Asia/Seoul";
 
@@ -17,43 +18,69 @@ export default function ConfirmedPage({ params }: { params: Promise<{ id: string
   const router = useRouter();
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
   const [participants, setParticipants] = useState<ParticipantWithStatus[] | null>(null);
+  const [participantStatuses, setParticipantStatuses] = useState<Map<number, ParticipantWindowStatus> | null>(null);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const fetchConfirmedData = useCallback(() => {
+    Promise.all([getMeeting(Number(id)), listParticipants(Number(id)), getRecommendations(Number(id)), getVoteDetails(Number(id))])
+      .then(([meetingResult, participantsResult, recommendationsResult, voteDetailsResult]) => {
+        setMeeting(meetingResult);
+        setParticipants(participantsResult.participants);
+        const confirmedRecommendation = recommendationsResult.recommendations.find((recommendation) =>
+          recommendation.startAt === meetingResult.confirmedStartAt
+          && recommendation.endAt === meetingResult.confirmedEndAt,
+        );
+        const statuses = voteDetailsResult.recommendations.find((detail) => detail.recommendationId === confirmedRecommendation?.recommendationId)?.participantStatuses ?? [];
+        setParticipantStatuses(new Map(statuses.map((item) => [item.participantId, item.status])));
+      })
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
+          router.replace(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+          return;
+        }
+        setError(getApiErrorMessage(e, "확정된 일정 정보를 불러오지 못했어요."));
+      });
+  }, [id, router]);
 
   useEffect(() => {
     if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
-    Promise.all([getMeeting(Number(id)), listParticipants(Number(id))])
-      .catch((e: unknown) => {
-        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
-      })
-      .then((result) => {
-        if (!result) return;
-        const [meetingResult, participantsResult] = result;
-        setMeeting(meetingResult);
-        setParticipants(participantsResult.participants);
-      });
-  }, [id, router]);
+    fetchConfirmedData();
+  }, [router, fetchConfirmedData]);
 
   const handleCalendar = async () => {
     const token = (await import("@/lib/api")).getToken();
     if (!token) return;
     const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-    const res = await fetch(`${API_BASE}/api/meetings/${id}/calendar.ics`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `whenwe-${id}.ics`;
-    a.click();
-    URL.revokeObjectURL(url);
+    setActionError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/meetings/${id}/calendar.ics`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("calendar download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `whenwe-${id}.ics`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setActionError("캘린더 파일을 다운로드하지 못했어요. 다시 시도해 주세요.");
+    }
   };
 
-  const handleCopy = () => {
-    if (meeting?.inviteUrl) navigator.clipboard.writeText(meeting.inviteUrl).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    if (!meeting?.inviteUrl) return;
+    setActionError(null);
+    try {
+      await navigator.clipboard.writeText(meeting.inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setActionError("공유 링크를 복사하지 못했어요. 다시 시도해 주세요.");
+    }
   };
 
   const confirmedDateLine = meeting?.confirmedStartAt
@@ -72,6 +99,15 @@ export default function ConfirmedPage({ params }: { params: Promise<{ id: string
       />
 
       <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {error && (
+          <div role="alert" className="card" style={{ textAlign: "center" }}>
+            <p className="t-body2" style={{ marginBottom: 12 }}>{error}</p>
+            <Button onClick={() => { setError(null); fetchConfirmedData(); }}>다시 시도</Button>
+          </div>
+        )}
+
+        {actionError && <p role="alert" className="t-cap" style={{ color: "var(--color-error)" }}>{actionError}</p>}
 
         {/* Hero card */}
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12, position: "relative", overflow: "hidden" }}>
@@ -101,28 +137,29 @@ export default function ConfirmedPage({ params }: { params: Promise<{ id: string
           {participants?.length === 0 && (
             <div className="t-body2" style={{ color: "var(--color-text-2)" }}>아직 참여자가 없어요.</div>
           )}
-          {participants && participants.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              {participants.map((participant) => (
-                <span
-                  key={participant.participantId}
-                  className="t-body2"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "7px 10px",
-                    borderRadius: 999,
-                    background: "var(--color-primary-soft)",
-                    color: "var(--color-primary)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {participant.guestName}
-                  {participant.isRequired && <span aria-label="필수 참여자">· 필수</span>}
-                </span>
-              ))}
-            </div>
+          {participants && participants.length > 0 && ([
+            { key: "AVAILABLE", label: "가능", color: "var(--color-primary)", bg: "var(--color-primary-soft)" },
+            { key: "MAYBE", label: "애매", color: "var(--color-maybe-text)", bg: "var(--color-maybe-soft)" },
+            { key: "UNAVAILABLE", label: "불가", color: "var(--color-text-2)", bg: "var(--color-bg-2)" },
+            { key: "NO_RESPONSE", label: "미응답", color: "var(--color-text-muted)", bg: "var(--color-bg-2)" },
+          ] as const).map((group) => {
+            const people = participants.filter((participant) => participantStatuses?.get(participant.participantId) === group.key);
+            if (people.length === 0) return null;
+            return (
+              <div key={group.key} style={{ marginTop: 6 }}>
+                <div className="t-cap" style={{ color: group.color, fontWeight: 800, marginBottom: 5 }}>{group.label} {people.length}명</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {people.map((participant) => (
+                    <span key={participant.participantId} className="t-body2" style={{ display: "inline-flex", padding: "7px 10px", borderRadius: 999, background: group.bg, color: group.color, fontWeight: 700 }}>
+                      {participant.guestName}{participant.isRequired ? " · 필수" : ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {participants && participants.length > 0 && participantStatuses?.size === 0 && (
+            <p className="t-body2">참여자별 상태를 불러오지 못했어요.</p>
           )}
         </div>
 

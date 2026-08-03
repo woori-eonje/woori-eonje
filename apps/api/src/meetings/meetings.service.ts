@@ -14,15 +14,40 @@ import {
   type MeetingSummary,
   type Participant,
   type ParticipantsResponse,
+  ParticipantWindowStatus,
+  type RecommendationParticipantDetail,
+  type SlotVoteDetail,
+  type VoteDetailsResponse,
 } from '@whenwe/types';
 import { DomainException } from '../common/domain-exception';
-import { assertMeetingOwner, meetingNotFound } from '../common/meeting-access';
+import {
+  assertMeetingOwner,
+  meetingNotFound,
+  participantNotFound,
+} from '../common/meeting-access';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  buildStatusMap,
+  classifyParticipant,
+  type EngineSlot,
+  type IntervalClass,
+} from '../recommendations/recommendation.engine';
 import { RecommendationsService } from '../recommendations/recommendations.service';
 import { buildICS } from './ics';
 import { expandDateRange, generateSlots } from './slot-generation';
 
-const MAX_PERIOD_DAYS = 14;
+// 엔진의 소문자 IntervalClass → API 계약의 대문자 ParticipantWindowStatus.
+const INTERVAL_CLASS_TO_WINDOW_STATUS: Record<
+  IntervalClass,
+  ParticipantWindowStatus
+> = {
+  available: ParticipantWindowStatus.AVAILABLE,
+  maybe: ParticipantWindowStatus.MAYBE,
+  unavailable: ParticipantWindowStatus.UNAVAILABLE,
+  no_response: ParticipantWindowStatus.NO_RESPONSE,
+};
+
+const MAX_PERIOD_DAYS = 30;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -425,6 +450,123 @@ export class MeetingsService {
     };
   }
 
+  // GET /api/meetings/:meetingId/vote-details — JWT + 모임장 소유. 공개 초대 API에는 없음.
+  // "누가 어떤 시간에 무엇을 선택했는지" 전체 상세 — 슬롯별 투표 + 추천 구간별 참여자 상태.
+  // 추천 구간 상태는 recommendation.engine 의 classifyParticipant 를 그대로 재사용해,
+  // 프론트가 규칙을 별도 재구현할 때 생길 수 있는 추천 인원수와의 불일치를 막는다.
+  async getVoteDetails(
+    meetingId: number,
+    userId: number,
+  ): Promise<VoteDetailsResponse> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    const [participants, slots, responses, recommendations] = await Promise.all(
+      [
+        this.prisma.participant.findMany({
+          where: { meetingId },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            guestName: true,
+            participantType: true,
+            isRequired: true,
+          },
+        }),
+        this.prisma.availabilitySlot.findMany({
+          where: { meetingId },
+          orderBy: { slotStartAt: 'asc' },
+          select: { id: true, slotStartAt: true, slotEndAt: true },
+        }),
+        this.prisma.participantAvailability.findMany({
+          where: { meetingId },
+          select: {
+            participantId: true,
+            slotId: true,
+            availabilityStatus: true,
+          },
+        }),
+        this.prisma.recommendationResult.findMany({
+          where: { meetingId },
+          orderBy: { rank: 'asc' },
+          select: { id: true, startAt: true, endAt: true },
+        }),
+      ],
+    );
+
+    // hasResponded: 응답 목록에 한 번이라도 등장하는지로 판정(별도 distinct 쿼리 불필요 —
+    // 이미 전체 응답을 메모리에 들고 있어 listParticipants 와 달리 재조회하지 않는다).
+    const respondedParticipantIds = new Set(
+      responses.map((r) => r.participantId),
+    );
+    const participantsOut = participants.map((p) => ({
+      participantId: p.id,
+      guestName: p.guestName,
+      participantType: p.participantType,
+      isRequired: p.isRequired,
+      hasResponded: respondedParticipantIds.has(p.id),
+    }));
+
+    // 슬롯별 투표 — 미응답 참여자는 votes 에 없음(aggregate 카운트와 합이 일치해야 함).
+    const votesBySlot = new Map<
+      number,
+      Array<{ participantId: number; status: AvailabilityStatus }>
+    >();
+    for (const r of responses) {
+      const list = votesBySlot.get(r.slotId) ?? [];
+      list.push({
+        participantId: r.participantId,
+        status: r.availabilityStatus,
+      });
+      votesBySlot.set(r.slotId, list);
+    }
+    const slotsOut: SlotVoteDetail[] = slots.map((s) => ({
+      slotId: s.id,
+      startAt: s.slotStartAt.toISOString(),
+      endAt: s.slotEndAt.toISOString(),
+      votes: votesBySlot.get(s.id) ?? [],
+    }));
+
+    // 추천 구간별 참여자 상태 — 저장된 추천 행은 slotId 목록을 갖고 있지 않으므로
+    // (startAt~endAt) 범위로 해당 구간의 슬롯들을 다시 골라 classifyParticipant 에 넣는다.
+    // ISO 문자열은 사전식 비교가 시간 순서와 일치해 그대로 범위 비교에 쓸 수 있다.
+    const engineSlots: EngineSlot[] = slots.map((s) => ({
+      id: s.id,
+      slotStartAt: s.slotStartAt.toISOString(),
+      slotEndAt: s.slotEndAt.toISOString(),
+    }));
+    const statusByKey = buildStatusMap(responses);
+    const recommendationsOut: RecommendationParticipantDetail[] =
+      recommendations.map((rec) => {
+        const rangeStart = rec.startAt.toISOString();
+        const rangeEnd = rec.endAt.toISOString();
+        const window = engineSlots.filter(
+          (s) => s.slotStartAt >= rangeStart && s.slotEndAt <= rangeEnd,
+        );
+        return {
+          recommendationId: rec.id,
+          // 전체 참여자 포함 — 미응답자도 NO_RESPONSE 로 명시(완료조건).
+          participantStatuses: participants.map((p) => ({
+            participantId: p.id,
+            status:
+              INTERVAL_CLASS_TO_WINDOW_STATUS[
+                classifyParticipant(p.id, window, statusByKey)
+              ],
+          })),
+        };
+      });
+
+    return {
+      meetingId,
+      participants: participantsOut,
+      slots: slotsOut,
+      recommendations: recommendationsOut,
+    };
+  }
+
   // PATCH /api/meetings/:meetingId/participants/:participantId — JWT + 모임장 소유.
   // is_required 변경 후 추천 재계산(8단계 ①에 영향).
   async setParticipantRequired(
@@ -468,6 +610,68 @@ export class MeetingsService {
       participantType: updated.participantType,
       isRequired: updated.isRequired,
     };
+  }
+
+  // DELETE /api/meetings/:meetingId/participants/:participantId — JWT + 모임장 소유.
+  // COLLECTING/READY_TO_CONFIRM 에서만 허용(확정된 모임은 결과 보존을 위해 거부).
+  // availability는 Participant.availabilities 의 onDelete: Cascade(schema)로 함께 삭제된다.
+  async deleteParticipant(
+    meetingId: number,
+    participantId: number,
+    userId: number,
+  ): Promise<Record<string, never>> {
+    const meeting = await this.prisma.meeting.findUnique({
+      where: { id: meetingId },
+      select: { id: true, ownerId: true, status: true },
+    });
+    assertMeetingOwner(meeting, userId);
+
+    // 사전 status 체크 — 흔한 "이미 확정된 모임" 케이스를 빠르게 거부(confirmMeeting 과 동일 패턴).
+    if (
+      meeting.status !== MeetingStatus.COLLECTING &&
+      meeting.status !== MeetingStatus.READY_TO_CONFIRM
+    ) {
+      throw this.participantMeetingNotEditable();
+    }
+
+    // 존재+소속+상태를 where 절에 모두 넣어 원자적으로 확인 — 이 체크와 삭제 사이에
+    // 다른 요청이 모임을 확정해도(경합) 확정된 모임에서 삭제가 새어나가지 않는다
+    // (confirmMeeting 의 조건부 updateMany 경합 방어와 정합).
+    const { count } = await this.prisma.participant.deleteMany({
+      where: {
+        id: participantId,
+        meetingId,
+        meeting: {
+          status: {
+            in: [MeetingStatus.COLLECTING, MeetingStatus.READY_TO_CONFIRM],
+          },
+        },
+      },
+    });
+    if (count === 0) {
+      // count===0 인 이유가 "참여자 없음/다른 모임 소속" 인지 "그 사이 확정됨" 인지 구분.
+      const stillExists = await this.prisma.participant.findFirst({
+        where: { id: participantId, meetingId },
+        select: { id: true },
+      });
+      if (stillExists) {
+        throw this.participantMeetingNotEditable();
+      }
+      throw participantNotFound();
+    }
+
+    // 참여자 삭제 → 추천 결과 재계산(8단계 ①~⑥에 영향).
+    await this.recommendationsService.recompute(meetingId);
+
+    return {};
+  }
+
+  private participantMeetingNotEditable(): DomainException {
+    return new DomainException(
+      ErrorCode.MEETING_NOT_EDITABLE,
+      HttpStatus.CONFLICT,
+      '확정된 모임의 참여자는 삭제할 수 없습니다.',
+    );
   }
 
   // POST /api/meetings/:meetingId/confirm — JWT + 모임장 소유.

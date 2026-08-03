@@ -122,6 +122,84 @@ paths:
                       data: { $ref: '#/components/schemas/AuthUser' }
         '401':
           $ref: '#/components/responses/Error'
+    delete:
+      tags: [Auth]
+      operationId: withdraw
+      summary: 회원 탈퇴
+      description: |
+        비밀번호 재확인 후 탈퇴 처리한다. 소유한 모임은 하위 데이터(참여자·슬롯·
+        가능시간·추천·상태로그)와 함께 삭제되고, 다른 모임에 남긴 참여 기록은
+        유지되되 userId 가 null 로 분리된다(비회원화). 탈퇴한 사용자의 기존 JWT는
+        이후 보호 API에서 사용할 수 없다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WithdrawRequest' }
+      responses:
+        '200':
+          description: 탈퇴 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Empty' }
+        '401':
+          $ref: '#/components/responses/Error'
+
+  /api/auth/password/forgot:
+    post:
+      tags: [Auth]
+      operationId: forgotPassword
+      summary: 비밀번호 재설정 메일 요청
+      description: 계정 존재 여부와 무관하게 항상 동일한 200 응답을 반환한다. IP 단위 5회/분 제한.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+      responses:
+        '200':
+          description: 요청 접수(계정 존재 여부·발송 성공 여부와 무관하게 항상 동일)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Empty' }
+        '400':
+          $ref: '#/components/responses/Error'
+
+  /api/auth/password/reset:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: 새 비밀번호 설정
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '200':
+          description: 비밀번호 변경 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Empty' }
+        '400':
+          $ref: '#/components/responses/Error'
 
   # ──────────────── Meetings ────────────────
   /api/meetings:
@@ -318,6 +396,50 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /api/meetings/{meetingId}/vote-details:
+    parameters:
+      - $ref: '#/components/parameters/MeetingId'
+    get:
+      tags: [Meetings]
+      operationId: getVoteDetails
+      summary: 참여자별 투표 상세 (모임장)
+      description: |
+        "누가 어떤 시간에 무엇을 선택했는지" 전체 상세. 슬롯별 투표와 추천 구간별
+        참여자 상태를 함께 반환한다. 추천 구간 상태는 추천 엔진과 같은 규칙으로
+        계산되며(classifyParticipant 재사용), 미응답 참여자는 NO_RESPONSE 로
+        명시 포함된다. 공개 초대 API 에는 제공하지 않는다.
+      responses:
+        '200':
+          description: 참여자별 투표 상세
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          meetingId: { type: integer }
+                          participants:
+                            type: array
+                            description: 'createdAt 오름차순'
+                            items: { $ref: '#/components/schemas/ParticipantWithStatus' }
+                          slots:
+                            type: array
+                            description: 'slotStartAt 오름차순'
+                            items: { $ref: '#/components/schemas/SlotVoteDetail' }
+                          recommendations:
+                            type: array
+                            items: { $ref: '#/components/schemas/RecommendationParticipantDetail' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
   /api/meetings/{meetingId}/participants/{participantId}:
     parameters:
       - $ref: '#/components/parameters/MeetingId'
@@ -325,6 +447,33 @@ paths:
         in: path
         required: true
         schema: { type: integer }
+    delete:
+      tags: [Meetings]
+      operationId: deleteParticipant
+      summary: 참여자 삭제 (모임장)
+      description: |
+        COLLECTING/READY_TO_CONFIRM 상태에서만 허용한다. CONFIRMED/CLOSED 된
+        모임은 확정 결과 보존을 위해 거부(409)된다. 참여자의 가능시간(availability)은
+        스키마의 onDelete Cascade 로 함께 삭제되며, 삭제 후 추천 결과를 재계산한다.
+      responses:
+        '200':
+          description: 삭제 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Empty' }
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
     patch:
       tags: [Meetings]
       operationId: setParticipantRequired
@@ -430,6 +579,8 @@ paths:
         Authorization: Bearer 가 있으면 로그인 사용자를 MEMBER 로 연동해 등록한다
         (한 모임 1회 — 이미 참여했으면 기존 참여자를 그대로 반환, editToken 은 null).
         Bearer 가 없으면 기존처럼 GUEST 로 등록하고 participantEditToken 을 발급한다.
+        409 PARTICIPANT_NICKNAME_TAKEN 은 GUEST 경로에서만 발생한다 — MEMBER 경로의 중복 등록은
+        idempotent 하게 기존 참여자를 201 로 반환한다.
       # 빈 객체 = 인증 없이도 가능(GUEST), 또는 bearerAuth(MEMBER).
       security:
         - {}
@@ -443,6 +594,10 @@ paths:
               required: [guestName]
               properties:
                 guestName: { type: string, minLength: 2, maxLength: 12 }
+                pin:
+                  type: string
+                  pattern: '^\d{4}$'
+                  description: '비회원(GUEST) 등록 시 필수 — 숫자 4자리. 회원(Bearer) 등록에는 불필요.'
       responses:
         '201':
           description: 등록 성공
@@ -454,9 +609,56 @@ paths:
                   - type: object
                     properties:
                       data: { $ref: '#/components/schemas/ParticipantRegistered' }
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '410':
+          $ref: '#/components/responses/Error'
+
+  /api/invites/{inviteToken}/participants/session:
+    parameters:
+      - $ref: '#/components/parameters/InviteToken'
+    post:
+      tags: [Invites]
+      operationId: participantSession
+      summary: 비회원 닉네임 + 참여 PIN 재접속
+      description: |
+        닉네임(정규화 기준)과 참여 PIN으로 기존 비회원 참여자를 재식별해
+        participantEditToken 을 반환한다. PIN 을 설정한 적 없는 레거시 참여자는
+        이 API 로 접근할 수 없다(기존 edit token 방식만 가능).
+        브루트포스 방어: 초대+닉네임 단위 5회 실패 시 10분 잠금 + IP 단위 5회/분 제한.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [guestName, pin]
+              properties:
+                guestName: { type: string }
+                pin: { type: string, pattern: '^\d{4}$' }
+      responses:
+        '200':
+          description: 재접속 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ParticipantSessionResult' }
+        '401':
+          $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
         '410':
+          $ref: '#/components/responses/Error'
+        '429':
           $ref: '#/components/responses/Error'
 
   # ──────────────── Slots & Availability ────────────────
@@ -526,6 +728,8 @@ paths:
                         properties:
                           saved: { type: boolean }
                           updatedRecommendation: { type: boolean }
+        '400':
+          $ref: '#/components/responses/Error'
         '401':
           $ref: '#/components/responses/Error'
         '409':
@@ -679,6 +883,10 @@ components:
     AvailabilityStatus:
       type: string
       enum: [AVAILABLE, MAYBE, UNAVAILABLE]
+    ParticipantWindowStatus:
+      type: string
+      description: '추천 구간(여러 슬롯 묶음)에서의 참여자 상태. AvailabilityStatus 와 달리 미응답(NO_RESPONSE)을 포함한다.'
+      enum: [AVAILABLE, MAYBE, UNAVAILABLE, NO_RESPONSE]
     ParticipantType:
       type: string
       enum: [MEMBER, GUEST]
@@ -692,16 +900,22 @@ components:
         - INVITE_TOKEN_INVALID
         - INVITE_TOKEN_EXPIRED
         - RESPONSE_DEADLINE_PASSED
+        - AVAILABILITY_REQUIRED
         - MEETING_ALREADY_CONFIRMED
         - RESPONSE_ALREADY_EXISTS
         - MEETING_NOT_EDITABLE
+        - PARTICIPANT_NOT_FOUND
         - PARTICIPANT_EDIT_TOKEN_INVALID
+        - PARTICIPANT_NICKNAME_TAKEN
+        - INVALID_PARTICIPANT_CREDENTIALS
+        - PARTICIPANT_LOGIN_RATE_LIMITED
         - FORBIDDEN_MEETING_OWNER_ONLY
         - RECOMMENDATION_NOT_READY
         - MEETING_NOT_CONFIRMED
         - EMAIL_ALREADY_EXISTS
         - INVALID_CREDENTIALS
         - UNAUTHENTICATED
+        - PASSWORD_RESET_TOKEN_INVALID
         - VALIDATION_ERROR
         - INTERNAL_ERROR
 
@@ -730,6 +944,22 @@ components:
       properties:
         accessToken: { type: string }
         user: { $ref: '#/components/schemas/AuthUser' }
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    ResetPasswordRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string }
+        newPassword: { type: string, minLength: 8, maxLength: 72 }
+    WithdrawRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string, description: '현재 비밀번호 재확인' }
 
     # ── Meetings ──
     CreateMeetingRequest:
@@ -739,7 +969,7 @@ components:
         title: { type: string, minLength: 1, maxLength: 100 }
         description: { type: [string, 'null'], maxLength: 500 }
         category: { $ref: '#/components/schemas/MeetingCategory' }
-        startDate: { type: string, format: date, description: '조율 시작일 (기간은 최대 14일)' }
+        startDate: { type: string, format: date, description: '조율 시작일 (기간은 최대 30일)' }
         endDate: { type: string, format: date }
         availableStartTime: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', description: 'HH:mm (1시간 슬롯 단위라 정시만 — 분=00)' }
         availableEndTime: { type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', description: 'HH:mm (1시간 슬롯 단위라 정시만 — 분=00)' }
@@ -823,6 +1053,13 @@ components:
         guestName: { type: string }
         # 회원(MEMBER, Bearer 로 참여)은 JWT 로 식별하므로 null. 비회원(GUEST)만 토큰 발급.
         participantEditToken: { type: [string, 'null'] }
+    ParticipantSessionResult:
+      type: object
+      properties:
+        participantId: { type: integer }
+        guestName: { type: string }
+        # 비회원 세션 성공 시 항상 비어있지 않은 문자열(회원 등록의 null 과 구분).
+        participantEditToken: { type: string }
     Participant:
       type: object
       properties:
@@ -863,6 +1100,22 @@ components:
         availableCount: { type: integer }    # 이 슬롯에 '가능'을 찍은 참여자 수
         maybeCount: { type: integer }        # '애매'
         unavailableCount: { type: integer }  # '불가'
+    SlotVoteDetail:
+      type: object
+      required: [slotId, startAt, endAt, votes]
+      properties:
+        slotId: { type: integer }
+        startAt: { type: string, format: date-time }
+        endAt: { type: string, format: date-time }
+        votes:
+          type: array
+          description: '이 슬롯에 응답을 남긴 참여자만 포함(미응답자는 없음) — aggregate 카운트와 합이 같다.'
+          items:
+            type: object
+            required: [participantId, status]
+            properties:
+              participantId: { type: integer }
+              status: { $ref: '#/components/schemas/AvailabilityStatus' }
     AvailabilityItem:
       type: object
       required: [slotId, status]
@@ -876,6 +1129,7 @@ components:
         participantId: { type: integer }
         items:
           type: array
+          minItems: 1
           items: { $ref: '#/components/schemas/AvailabilityItem' }
     MyAvailability:
       type: object
@@ -902,6 +1156,20 @@ components:
         requiredUnavailableCount: { type: integer }
         requiredParticipantSatisfied: { type: boolean }
         score: { type: integer }
+    RecommendationParticipantDetail:
+      type: object
+      required: [recommendationId, participantStatuses]
+      properties:
+        recommendationId: { type: integer }
+        participantStatuses:
+          type: array
+          description: '전체 참여자 포함 — 미응답자는 NO_RESPONSE 로 명시된다.'
+          items:
+            type: object
+            required: [participantId, status]
+            properties:
+              participantId: { type: integer }
+              status: { $ref: '#/components/schemas/ParticipantWindowStatus' }
 
 # 전역 기본 보안: JWT Bearer (각 비회원/공개 엔드포인트에서 security 로 override)
 security:
