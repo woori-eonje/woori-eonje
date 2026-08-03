@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { hash } from 'bcryptjs';
 import {
   ErrorCode,
   type InvitePublic,
@@ -10,6 +11,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { DomainException } from '../common/domain-exception';
 import { resolveOptionalUserId } from '../auth/optional-bearer';
+import { normalizeNickname } from './nickname';
+
+const PIN_PATTERN = /^\d{4}$/;
+const PIN_BCRYPT_ROUNDS = 10; // auth.service.ts 의 BCRYPT_ROUNDS 와 동일 정책.
 
 @Injectable()
 export class InvitesService {
@@ -161,23 +166,57 @@ export class InvitesService {
       }
     }
 
-    // 비회원 참여자 식별은 닉네임이 아니라 participantId + editToken.
-    // 동일 닉네임을 허용하며, 매 등록은 새 Participant 를 생성한다.
-    const participant = await this.prisma.participant.create({
-      data: {
-        meetingId: meeting.id,
-        userId: null,
-        guestName,
-        participantType: 'GUEST',
-        editToken: randomUUID(),
-      },
-    });
+    // 비회원 참여자는 기존 participantId + editToken 식별에 더해, 신규 등록부터는
+    // 닉네임(정규화 기준 유일) + 참여 PIN 으로도 재접속할 수 있다(POST .../participants/session).
+    // ADR: docs/decisions/0001-guest-participant-pin-reauth.md
+    const pin = body?.pin;
+    if (!pin || !PIN_PATTERN.test(pin)) {
+      throw new BadRequestException('참여 PIN은 숫자 4자리여야 합니다.');
+    }
 
-    return {
-      participantId: participant.id,
-      guestName: participant.guestName,
-      participantEditToken: participant.editToken!,
-    };
+    const normalizedGuestName = normalizeNickname(guestName);
+    const duplicate = await this.prisma.participant.findFirst({
+      where: { meetingId: meeting.id, normalizedGuestName },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw this.nicknameTaken();
+    }
+
+    const pinHash = await hash(pin, PIN_BCRYPT_ROUNDS);
+    try {
+      const participant = await this.prisma.participant.create({
+        data: {
+          meetingId: meeting.id,
+          userId: null,
+          guestName,
+          normalizedGuestName,
+          participantType: 'GUEST',
+          editToken: randomUUID(),
+          pinHash,
+        },
+      });
+
+      return {
+        participantId: participant.id,
+        guestName: participant.guestName,
+        participantEditToken: participant.editToken!,
+      };
+    } catch (e) {
+      // 경합: 중복 확인과 create 사이에 같은 닉네임이 먼저 등록되면 unique(P2002) 위반.
+      if (this.isUniqueViolation(e)) {
+        throw this.nicknameTaken();
+      }
+      throw e;
+    }
+  }
+
+  private nicknameTaken(): DomainException {
+    return new DomainException(
+      ErrorCode.PARTICIPANT_NICKNAME_TAKEN,
+      HttpStatus.CONFLICT,
+      '이미 사용 중인 닉네임이에요.',
+    );
   }
 
   // Prisma unique 제약 위반(P2002) 판별 — auth.service 의 동명 헬퍼와 같은 duck-typing.
