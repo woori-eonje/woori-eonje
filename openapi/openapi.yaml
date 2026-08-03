@@ -579,6 +579,8 @@ paths:
         Authorization: Bearer 가 있으면 로그인 사용자를 MEMBER 로 연동해 등록한다
         (한 모임 1회 — 이미 참여했으면 기존 참여자를 그대로 반환, editToken 은 null).
         Bearer 가 없으면 기존처럼 GUEST 로 등록하고 participantEditToken 을 발급한다.
+        409 PARTICIPANT_NICKNAME_TAKEN 은 GUEST 경로에서만 발생한다 — MEMBER 경로의 중복 등록은
+        idempotent 하게 기존 참여자를 201 로 반환한다.
       # 빈 객체 = 인증 없이도 가능(GUEST), 또는 bearerAuth(MEMBER).
       security:
         - {}
@@ -592,6 +594,10 @@ paths:
               required: [guestName]
               properties:
                 guestName: { type: string, minLength: 2, maxLength: 12 }
+                pin:
+                  type: string
+                  pattern: '^\d{4}$'
+                  description: '비회원(GUEST) 등록 시 필수 — 숫자 4자리. 회원(Bearer) 등록에는 불필요.'
       responses:
         '201':
           description: 등록 성공
@@ -603,9 +609,56 @@ paths:
                   - type: object
                     properties:
                       data: { $ref: '#/components/schemas/ParticipantRegistered' }
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '410':
+          $ref: '#/components/responses/Error'
+
+  /api/invites/{inviteToken}/participants/session:
+    parameters:
+      - $ref: '#/components/parameters/InviteToken'
+    post:
+      tags: [Invites]
+      operationId: participantSession
+      summary: 비회원 닉네임 + 참여 PIN 재접속
+      description: |
+        닉네임(정규화 기준)과 참여 PIN으로 기존 비회원 참여자를 재식별해
+        participantEditToken 을 반환한다. PIN 을 설정한 적 없는 레거시 참여자는
+        이 API 로 접근할 수 없다(기존 edit token 방식만 가능).
+        브루트포스 방어: 초대+닉네임 단위 5회 실패 시 10분 잠금 + IP 단위 5회/분 제한.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [guestName, pin]
+              properties:
+                guestName: { type: string }
+                pin: { type: string, pattern: '^\d{4}$' }
+      responses:
+        '200':
+          description: 재접속 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiSuccess'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/ParticipantSessionResult' }
+        '401':
+          $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
         '410':
+          $ref: '#/components/responses/Error'
+        '429':
           $ref: '#/components/responses/Error'
 
   # ──────────────── Slots & Availability ────────────────
@@ -850,6 +903,9 @@ components:
         - MEETING_NOT_EDITABLE
         - PARTICIPANT_NOT_FOUND
         - PARTICIPANT_EDIT_TOKEN_INVALID
+        - PARTICIPANT_NICKNAME_TAKEN
+        - INVALID_PARTICIPANT_CREDENTIALS
+        - PARTICIPANT_LOGIN_RATE_LIMITED
         - FORBIDDEN_MEETING_OWNER_ONLY
         - RECOMMENDATION_NOT_READY
         - MEETING_NOT_CONFIRMED
@@ -994,6 +1050,13 @@ components:
         guestName: { type: string }
         # 회원(MEMBER, Bearer 로 참여)은 JWT 로 식별하므로 null. 비회원(GUEST)만 토큰 발급.
         participantEditToken: { type: [string, 'null'] }
+    ParticipantSessionResult:
+      type: object
+      properties:
+        participantId: { type: integer }
+        guestName: { type: string }
+        # 비회원 세션 성공 시 항상 비어있지 않은 문자열(회원 등록의 null 과 구분).
+        participantEditToken: { type: string }
     Participant:
       type: object
       properties:
