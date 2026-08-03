@@ -103,19 +103,19 @@ model Meeting {
 }
 
 model Participant {
-  id              Int             @id @default(autoincrement())
-  meetingId       Int             @map("meeting_id")
-  userId          Int?            @map("user_id") // 비회원이면 null
-  guestName       String          @map("guest_name")
-  participantType ParticipantType @map("participant_type")
-  editToken       String?         @unique @map("edit_token") // 비회원 응답 수정용
+  id                  Int             @id @default(autoincrement())
+  meetingId           Int             @map("meeting_id")
+  userId              Int?            @map("user_id") // 비회원이면 null
+  guestName           String          @map("guest_name")
+  participantType     ParticipantType @map("participant_type")
+  editToken           String?         @unique @map("edit_token") // 비회원 응답 수정용
   // 참여 PIN 재접속(신규 비회원부터) — 회원/레거시 비회원은 null.
-  normalizedGuestName String?   @map("normalized_guest_name")
-  pinHash             String?   @map("pin_hash")
-  pinFailedAttempts   Int       @default(0) @map("pin_failed_attempts")
-  pinLockedUntil      DateTime? @map("pin_locked_until")
-  isRequired      Boolean         @default(false) @map("is_required")
-  createdAt       DateTime        @default(now()) @map("created_at")
+  normalizedGuestName String?         @map("normalized_guest_name")
+  pinHash             String?         @map("pin_hash")
+  pinFailedAttempts   Int             @default(0) @map("pin_failed_attempts")
+  pinLockedUntil      DateTime?       @map("pin_locked_until")
+  isRequired          Boolean         @default(false) @map("is_required")
+  createdAt           DateTime        @default(now()) @map("created_at")
 
   meeting        Meeting                   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
   // 회원 탈퇴 시 이 참여자·응답은 유지하되 회원 연결만 끊는다(userId → null).
