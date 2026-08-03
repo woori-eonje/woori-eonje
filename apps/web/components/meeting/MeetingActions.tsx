@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/primitives";
-import { ApiError } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/errors";
 import { deleteMeeting } from "@/lib/meetings";
 import { MeetingEditModal } from "./MeetingEditModal";
 import type { MeetingDetail } from "@whenwe/types";
@@ -32,7 +32,7 @@ export function MeetingActions({
       await deleteMeeting(meeting.meetingId);
       router.push("/meetings");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "삭제 중 오류가 생겼어요.");
+      setError(getApiErrorMessage(e, "삭제 중 오류가 생겼어요."));
       setDeleting(false);
     }
   };

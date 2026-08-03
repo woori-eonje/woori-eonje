@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
@@ -8,7 +8,8 @@ import { TopBar, Button } from "@/components/primitives";
 import { ChevronRight, Check } from "@/components/icons";
 import { StatRow } from "@/components/meeting/StatRow";
 import { getRecommendations, confirmMeeting } from "@/lib/meetings";
-import { ApiError, getToken } from "@/lib/api";
+import { getToken } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/errors";
 import type { Recommendation } from "@whenwe/types";
 
 const TZ = "Asia/Seoul";
@@ -36,13 +37,17 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
+  const fetchRecommendations = useCallback(() => {
     getRecommendations(Number(id))
       .then((res) => setRecs(res.recommendations))
-      .catch((e) => setError(e instanceof ApiError ? e.message : "추천 결과를 불러올 수 없어요."))
+      .catch((e) => setError(getApiErrorMessage(e, "추천 결과를 불러올 수 없어요.")))
       .finally(() => setLoading(false));
-  }, [id, router]);
+  }, [id]);
+
+  useEffect(() => {
+    if (!getToken()) { router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`); return; }
+    fetchRecommendations();
+  }, [router, fetchRecommendations]);
 
   const pick = recs[selected] ?? recs[0];
 
@@ -54,7 +59,7 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
       await confirmMeeting(Number(id), pick.recommendationId);
       router.push(`/meetings/${id}/confirmed`);
     } catch (e) {
-      setConfirmError(e instanceof ApiError ? e.message : "확정 중 오류가 생겼어요.");
+      setConfirmError(getApiErrorMessage(e, "확정 중 오류가 생겼어요."));
       setConfirming(false);
     }
   };
@@ -78,6 +83,7 @@ export default function RecommendationsPage({ params }: { params: Promise<{ id: 
         <TopBar title="추천 결과" onBack={() => router.back()} />
         <div style={{ padding: "48px 20px", textAlign: "center" }}>
           <p className="t-body2" style={{ marginBottom: 12 }}>{error ?? "추천 결과가 없어요."}</p>
+          {error && <Button onClick={() => { setError(null); setLoading(true); fetchRecommendations(); }}>다시 시도</Button>}
         </div>
       </div>
     );

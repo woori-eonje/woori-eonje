@@ -151,16 +151,19 @@ export default function MyMeetingsPage() {
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 12 }}>
           <Logo size={24} />
-          <button
-            onClick={handleLogout}
-            style={{
-              background: "transparent", border: "none",
-              color: "var(--color-text-muted)", fontFamily: "inherit",
-              fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "4px 0",
-            }}
-          >
-            로그아웃
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <Link href="/settings" style={{ color: "var(--color-text-2)", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>계정 설정</Link>
+            <button
+              onClick={handleLogout}
+              style={{
+                background: "transparent", border: "none",
+                color: "var(--color-text-muted)", fontFamily: "inherit",
+                fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "4px 0",
+              }}
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
         {/* 역할 전환 — 내가 만든 / 참여한 */}
         <div style={{ display: "inline-flex", gap: 4, padding: 3, background: "var(--color-bg-2)", borderRadius: 999, marginBottom: 12 }}>

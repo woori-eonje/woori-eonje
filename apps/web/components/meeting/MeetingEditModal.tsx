@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/primitives";
 import { DatePicker } from "@/components/ui/date-picker";
-import { ApiError } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/errors";
 import { updateMeeting } from "@/lib/meetings";
 import type { MeetingCategory, MeetingDetail } from "@whenwe/types";
 
@@ -74,7 +74,7 @@ export function MeetingEditModal({
       onUpdated(updated);
       onClose();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "수정 중 오류가 생겼어요.");
+      setError(getApiErrorMessage(e, "수정 중 오류가 생겼어요."));
       setSaving(false);
     }
   };

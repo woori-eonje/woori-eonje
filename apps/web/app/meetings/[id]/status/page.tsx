@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
@@ -9,6 +9,7 @@ import { Copy, Users, Clock, ChevronRight } from "@/components/icons";
 import { MeetingActions } from "@/components/meeting/MeetingActions";
 import { getMeeting } from "@/lib/meetings";
 import { ApiError, getToken } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/errors";
 import type { MeetingDetail } from "@whenwe/types";
 
 const TZ = "Asia/Seoul";
@@ -31,25 +32,39 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
   const router = useRouter();
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+
+  const fetchMeeting = useCallback(() => {
+    getMeeting(Number(id))
+      .then(setMeeting)
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
+          router.replace(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+          return;
+        }
+        setError(getApiErrorMessage(e, "모임 정보를 불러오지 못했어요."));
+      });
+  }, [id, router]);
 
   useEffect(() => {
     if (!getToken()) {
       router.replace(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
       return;
     }
-    getMeeting(Number(id))
-      .then(setMeeting)
-      .catch((e: unknown) => {
-        if (e instanceof ApiError && e.code === "UNAUTHENTICATED") {
-          router.replace(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
-        }
-      });
-  }, [id, router]);
+    fetchMeeting();
+  }, [router, fetchMeeting]);
 
-  const handleCopy = () => {
-    if (meeting?.inviteUrl) navigator.clipboard.writeText(meeting.inviteUrl).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    if (!meeting?.inviteUrl) return;
+    setCopyError(null);
+    try {
+      await navigator.clipboard.writeText(meeting.inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError("링크를 복사하지 못했어요. 다시 시도해 주세요.");
+    }
   };
 
   const startD = meeting ? new Date(meeting.startDate) : null;
@@ -67,6 +82,13 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
       />
 
       <div className="scroll" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 14 }}>
+
+        {error && (
+          <div role="alert" className="card" style={{ textAlign: "center" }}>
+            <p className="t-body2" style={{ marginBottom: 12 }}>{error}</p>
+            <Button onClick={() => { setError(null); fetchMeeting(); }}>다시 시도</Button>
+          </div>
+        )}
 
         {/* 모임 헤더 카드 */}
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12, position: "relative", overflow: "hidden" }}>
@@ -158,6 +180,7 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
             <span>{copied ? "복사됨!" : "복사"}</span>
           </button>
         </div>
+        {copyError && <p role="alert" className="t-cap" style={{ color: "var(--color-error)" }}>{copyError}</p>}
 
         {/* 추천 결과 보기 */}
         <button

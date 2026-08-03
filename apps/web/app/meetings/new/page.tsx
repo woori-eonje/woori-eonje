@@ -6,7 +6,8 @@ import { TopBar, Button } from "@/components/primitives";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Users, BookOpen, Briefcase, Copy, Share } from "@/components/icons";
 import { createMeeting } from "@/lib/meetings";
-import { ApiError, getToken } from "@/lib/api";
+import { getToken } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/errors";
 import type { MeetingCategory } from "@whenwe/types";
 
 const STEPS = [
@@ -181,6 +182,7 @@ export default function WizardPage() {
   const [meetingId, setMeetingId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!getToken()) router.replace(`/login?redirect=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/')}`);
@@ -222,16 +224,22 @@ export default function WizardPage() {
       setMeetingId(res.meetingId);
       setStep(4);
     } catch (e) {
-      setCreateError(e instanceof ApiError ? e.message : "모임 생성 중 오류가 생겼어요.");
+      setCreateError(getApiErrorMessage(e, "모임 생성 중 오류가 생겼어요."));
     } finally {
       setCreating(false);
     }
   };
 
-  const handleCopy = () => {
-    if (inviteUrl) navigator.clipboard.writeText(inviteUrl).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    if (!inviteUrl) return;
+    setShareError(null);
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setShareError("초대 링크를 복사하지 못했어요. 다시 시도해 주세요.");
+    }
   };
 
   const handleShare = async () => {
@@ -487,6 +495,7 @@ export default function WizardPage() {
           </div>
           <div className="bottom-bar">
             {createError && <p style={{ fontSize: 13, color: "var(--color-accent)", textAlign: "center", margin: 0 }}>{createError}</p>}
+            {shareError && <p role="alert" style={{ fontSize: 13, color: "var(--color-accent)", textAlign: "center", margin: 0 }}>{shareError}</p>}
             <Button block primary disabled={!data.duration || !data.range || creating} onClick={handleNext}>
               {creating ? "생성 중…" : "다음"}
             </Button>

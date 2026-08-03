@@ -99,6 +99,13 @@ export function authPatch<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
-export function authDelete<T>(path: string): Promise<T> {
-  return request<T>(path, { method: "DELETE", headers: bearerHeader() });
+export function authDelete<T>(path: string, body?: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "DELETE",
+    headers: {
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...bearerHeader(),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
 }

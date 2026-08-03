@@ -184,6 +184,23 @@ h1, h2, h3, p {
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
+.dashboard-grid,
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: start;
+}
+.recommendations-grid { grid-template-columns: minmax(0, 1fr) 380px; }
+
+@media (max-width: 820px) {
+  .dashboard-grid,
+  .recommendations-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+
 /* Horizontal scroll with right fade */
 .h-scroll {
   display: flex; overflow-x: auto;
