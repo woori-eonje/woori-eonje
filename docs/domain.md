@@ -17,8 +17,7 @@
 ### 비회원 참여 & 토큰 (두 토큰을 혼동하지 말 것)
 - `invite_token`: 모임 **접근**용. UUID/랜덤. 기본 만료 = 응답 마감일. 재발급 시 기존 토큰 비활성화.
 - `participant_edit_token`: 비회원 참여자의 **내 응답 수정**용. 클라이언트(localStorage)에 저장.
-- 식별은 기본적으로 닉네임이 아니라 `participant_id + edit_token` 기준. **동일 닉네임 허용**, 닉네임으로 덮어쓰지 않음. edit token 없으면 새 참여자로 등록.
-- **예외(참여 PIN 재접속, ADR `0001`)**: 신규 비회원 등록부터는 모임 내 정규화 닉네임이 유일해야 하며(`participants.normalized_guest_name` unique), 닉네임+PIN(`POST /api/invites/{inviteToken}/participants/session`)으로 기존 edit_token 을 재발급받을 수 있다. 레거시 비회원(PIN 미설정)은 계속 edit_token 방식만 사용한다.
+- 식별은 닉네임이 아니라 `participant_id + edit_token` 기준. **동일 닉네임 허용**, 닉네임으로 덮어쓰지 않음. edit token 없으면 새 참여자로 등록.
 
 ### 모임 상태머신
 `DRAFT → COLLECTING → READY_TO_CONFIRM → CONFIRMED → CLOSED` (`MeetingStatus` in `@whenwe/types`)
