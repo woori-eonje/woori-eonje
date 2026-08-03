@@ -19,7 +19,6 @@ const GUEST_NAME_PATTERN = /^[가-힣A-Za-z0-9]+(?: [가-힣A-Za-z0-9]+)*$/;
 
 export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
   const router = useRouter();
-  const pinEnabled = process.env.NEXT_PUBLIC_PARTICIPANT_PIN_ENABLED === "true";
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showGuestForm, setShowGuestForm] = useState(false);
   const [guestMode, setGuestMode] = useState<"register" | "restore">("register");
@@ -39,7 +38,6 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
     nameValid
     && (
       isLoggedIn
-      || !pinEnabled
       || (pinValid && (guestMode === "restore" || pin === pinConfirm))
     );
 
@@ -54,7 +52,7 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
 
   const handleStart = async () => {
     if (!valid || submitting) return;
-    if (loadParticipant(token)) {
+    if (loadParticipant(token) && guestMode !== "restore") {
       router.push(`/invite/${token}/time-select`);
       return;
     }
@@ -62,15 +60,15 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
     setError(null);
     try {
       const res =
-        pinEnabled && !isLoggedIn && guestMode === "restore"
+        !isLoggedIn && guestMode === "restore"
           ? await restoreParticipantSession(token, normalizedName, pin)
           : await registerParticipant(
               token,
               normalizedName,
               isLoggedIn,
-              pinEnabled && !isLoggedIn ? pin : undefined,
+              !isLoggedIn ? pin : undefined,
             );
-      if (pinEnabled && !isLoggedIn && !isValidGuestSession(res)) {
+      if (!isLoggedIn && !isValidGuestSession(res)) {
         setError("응답 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
         setSubmitting(false);
         return;
@@ -185,7 +183,7 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
             </div>
           </div>
 
-          {pinEnabled && !isLoggedIn && (
+          {!isLoggedIn && (
             <>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <label htmlFor="participant-pin" style={{ fontSize: 13, fontWeight: 700 }}>
@@ -365,7 +363,7 @@ export function InviteJoinView({ token, vm }: { token: string; vm: InviteVM }) {
                 비회원으로 입장
               </div>
               <div className="t-cap" style={{ marginTop: 3 }}>
-                {pinEnabled ? "닉네임과 참여 PIN으로 참여" : "닉네임만 입력하면 바로 참여"}
+                닉네임과 참여 PIN으로 참여
               </div>
             </div>
             <ChevronRight size={18} color="var(--color-text-muted)" />

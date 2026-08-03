@@ -252,6 +252,11 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
         router.replace(`/login?redirect=${encodeURIComponent(`/invite/${token}/time-select`)}`);
         return;
       }
+      if (e instanceof ApiError && e.code === "AVAILABILITY_REQUIRED") {
+        setError("시간을 하나 이상 선택해 주세요.");
+        setSubmitting(false);
+        return;
+      }
       setError(
         e instanceof ApiError ? e.message : "제출에 실패했어요. 잠시 후 다시 시도해 주세요.",
       );
