@@ -2,7 +2,7 @@
 
 import { use, useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { formatInTimeZone } from "date-fns-tz";
 import { ko } from "date-fns/locale";
 import { Logo, Button } from "@/components/primitives";
@@ -89,7 +89,7 @@ function AppHeader() {
   };
 
   return (
-    <header style={{
+    <header className="dashboard-header" style={{
       height: 68,
       background: "var(--color-surface)",
       borderBottom: "1px solid var(--color-line)",
@@ -102,7 +102,7 @@ function AppHeader() {
       </Link>
 
       {/* 내비게이션 */}
-      <nav style={{ display: "flex", gap: 4, marginLeft: 24 }}>
+      <nav className="dashboard-nav" style={{ display: "flex", gap: 4, marginLeft: 24 }}>
         <Link href="/meetings" style={{
           height: 36, padding: "0 16px",
           display: "inline-flex", alignItems: "center",
@@ -199,7 +199,7 @@ function MeetingHero({ meeting, onUpdated }: { meeting: MeetingDetail | null; on
     : "–";
 
   return (
-    <div style={{
+    <div className="meeting-hero" style={{
       background: "var(--color-surface)",
       border: "1px solid var(--color-line)",
       borderRadius: 24,
@@ -237,24 +237,24 @@ function MeetingHero({ meeting, onUpdated }: { meeting: MeetingDetail | null; on
       </svg>
 
       {/* 모임 정보 */}
-      <div style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
+      <div className="meeting-hero-content" style={{ flex: 1, minWidth: 0, position: "relative", zIndex: 1 }}>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, color: "var(--color-primary)" }}>
           {meeting ? CATEGORY_LABEL[meeting.category] : <span className="skeleton" style={{ display: "inline-block", width: 60, height: 14, borderRadius: 4 }} />}
         </div>
-        <h1 style={{ margin: "6px 0 0", fontSize: 26, fontWeight: 800, letterSpacing: "-0.035em", lineHeight: 1.25 }}>
+        <h1 className="meeting-hero-title" style={{ margin: "6px 0 0", fontSize: 26, fontWeight: 800, letterSpacing: "-0.035em", lineHeight: 1.25 }}>
           {meeting?.title ?? <span className="skeleton" style={{ display: "inline-block", width: 160, height: 26, borderRadius: 8 }} />}
         </h1>
-        <p style={{ margin: "8px 0 0", fontSize: 14, color: "var(--color-text-2)", letterSpacing: "-0.01em", lineHeight: 1.5 }}>
+        <p className="meeting-hero-description" style={{ margin: "8px 0 0", fontSize: 14, color: "var(--color-text-2)", letterSpacing: "-0.01em", lineHeight: 1.5 }}>
           {meeting?.description ?? ""}
         </p>
-        <div style={{ display: "flex", gap: 18, marginTop: 12, flexWrap: "wrap" as const }}>
+        <div className="meeting-hero-meta" style={{ display: "flex", gap: 18, marginTop: 12, flexWrap: "wrap" as const }}>
           {[
             { label: "조율 기간", value: dateRange },
             { label: "예상 소요", value: meeting ? `${meeting.durationHours}시간` : "–" },
             { label: "참여자",    value: meeting ? `${meeting.participantCount}명` : "–", color: "var(--color-primary)" },
             { label: "마감까지", value: meeting ? fmtDeadlineLeft(meeting.responseDeadline) : "–" },
           ].map(({ label, value, color }) => (
-            <span key={label} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, fontSize: 13, color: "var(--color-text-2)", whiteSpace: "nowrap" as const }}>
+            <span className="meeting-hero-meta-item" key={label} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, fontSize: 13, color: "var(--color-text-2)", whiteSpace: "nowrap" as const }}>
               {label} <b style={{ color: color ?? "var(--color-text)", fontWeight: 700 }}>{value}</b>
             </span>
           ))}
@@ -262,7 +262,7 @@ function MeetingHero({ meeting, onUpdated }: { meeting: MeetingDetail | null; on
       </div>
 
       {/* 액션 버튼 */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" as const, flex: "none", position: "relative", zIndex: 1 }}>
+      <div className="meeting-hero-actions" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" as const, flex: "none", position: "relative", zIndex: 1 }}>
         <span className="pill ok">
           <span style={{ width: 6, height: 6, borderRadius: 999, background: "var(--color-primary)", display: "inline-block" }} />
           응답 수집 중
@@ -290,7 +290,7 @@ function MeetingHero({ meeting, onUpdated }: { meeting: MeetingDetail | null; on
 ══════════════════════════════════════════════════════ */
 function PageTabs({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
-    <div style={{
+    <div className="dashboard-tabs" style={{
       display: "inline-flex",
       background: "var(--color-surface)",
       border: "1px solid var(--color-line)",
@@ -418,7 +418,7 @@ function AggregateTab({ slots, meeting, voteDetails, voteDetailsError, error, on
   return (
     <div className="dashboard-grid">
       {/* 히트맵 */}
-      <div className="card" style={{ padding: 28, overflow: "hidden" }}>
+      <div className="card dashboard-primary-card" style={{ padding: 28, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 22, flexWrap: "wrap" as const, gap: 12 }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1.3 }}>언제 가장 많이 모일 수 있을까요?</h2>
@@ -448,7 +448,7 @@ function AggregateTab({ slots, meeting, voteDetails, voteDetailsError, error, on
           </div>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
+        <div className="dashboard-table-scroll" style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "separate", borderSpacing: 5, fontFamily: "inherit", minWidth: 480 }}>
             <thead>
               <tr>
@@ -742,8 +742,75 @@ function RequiredParticipantsPanel({
 /* ══════════════════════════════════════════════════════
    추천 결과 탭
 ══════════════════════════════════════════════════════ */
+function RecommendationCalendar({ meeting, recs, selected, onSelect }: {
+  meeting: MeetingDetail;
+  recs: ApiRec[];
+  selected: number;
+  onSelect: (rank: number) => void;
+}) {
+  const dates = useMemo(() => {
+    const result: string[] = [];
+    const cursor = new Date(`${meeting.startDate}T12:00:00Z`);
+    const end = new Date(`${meeting.endDate}T12:00:00Z`);
+    while (cursor <= end) {
+      result.push(cursor.toISOString().slice(0, 10));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return result;
+  }, [meeting.startDate, meeting.endDate]);
+  const recsByDate = useMemo(() => {
+    const map = new Map<string, ApiRec[]>();
+    recs.forEach((rec) => {
+      const key = formatInTimeZone(rec.startAt, TZ, "yyyy-MM-dd");
+      map.set(key, [...(map.get(key) ?? []), rec].sort((a, b) => a.rank - b.rank));
+    });
+    return map;
+  }, [recs]);
+  const leading = dates.length > 0 ? new Date(`${dates[0]}T12:00:00Z`).getUTCDay() : 0;
+
+  return (
+    <div className="card recommendation-calendar" style={{ padding: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 18 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-0.03em" }}>추천 순위 달력</h2>
+          <p className="t-cap" style={{ marginTop: 5 }}>순위가 있는 날짜를 누르면 상세 시간이 바뀌어요.</p>
+        </div>
+        <span className="pill ok">TOP {recs.length}</span>
+      </div>
+      <div className="recommendation-calendar-grid recommendation-calendar-weekdays">
+        {["일", "월", "화", "수", "목", "금", "토"].map((day) => <span key={day}>{day}</span>)}
+      </div>
+      <div className="recommendation-calendar-grid">
+        {Array.from({ length: leading }).map((_, index) => <span key={`blank-${index}`} />)}
+        {dates.map((date) => {
+          const dayRecs = recsByDate.get(date) ?? [];
+          const [, month, day] = date.split("-").map(Number);
+          const active = dayRecs.some((rec) => rec.rank === selected);
+          return (
+            <button
+              key={date}
+              type="button"
+              disabled={dayRecs.length === 0}
+              onClick={() => dayRecs[0] && onSelect(dayRecs[0].rank)}
+              className={`recommendation-calendar-day${active ? " active" : ""}`}
+              aria-label={`${month}월 ${day}일${dayRecs.length ? ` 추천 ${dayRecs.map((rec) => `${rec.rank}순위`).join(", ")}` : " 추천 없음"}`}
+            >
+              <span className="recommendation-calendar-date">{day === 1 || date === dates[0] ? `${month}.${day}` : day}</span>
+              <span className="recommendation-calendar-ranks">
+                {dayRecs.slice(0, 2).map((rec) => <span key={rec.rank} className={`recommendation-rank rank-${rec.rank}`}>{rec.rank}위</span>)}
+                {dayRecs.length > 2 && <span className="recommendation-more">+{dayRecs.length - 2}</span>}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function RecommendationsTab({
   recs,
+  meeting,
   meetingId,
   voteDetails,
   voteDetailsError,
@@ -755,6 +822,7 @@ function RecommendationsTab({
   onParticipantsChanged,
 }: {
   recs: ApiRec[] | null;
+  meeting: MeetingDetail | null;
   meetingId: number;
   voteDetails: VoteDetailsResponse | null;
   voteDetailsError: boolean;
@@ -766,6 +834,7 @@ function RecommendationsTab({
   onParticipantsChanged: () => void;
 }) {
   const [selected, setSelected] = useState(1);
+  const [view, setView] = useState<"list" | "calendar">("list");
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const router = useRouter();
@@ -805,11 +874,44 @@ function RecommendationsTab({
 
   const rec = recs.find((r) => r.rank === selected) ?? recs[0];
   const recommendationStatuses = voteDetails?.recommendations.find((item) => item.recommendationId === rec.recommendationId)?.participantStatuses ?? [];
+  const handleConfirmRecommendation = async () => {
+    if (confirming) return;
+    setConfirming(true);
+    setConfirmError(null);
+    try {
+      await confirmMeeting(meetingId, rec.recommendationId);
+      onConfirmed();
+      router.push(`/meetings/${meetingId}/confirmed`);
+    } catch (e) {
+      setConfirmError(e instanceof ApiError ? e.message : "확정 중 오류가 생겼어요.");
+      setConfirming(false);
+    }
+  };
 
   return (
-    <div className="recommendations-grid">
+    <div>
+      <div className="recommendation-view-toggle" role="tablist" aria-label="추천 결과 보기 방식">
+        <button type="button" role="tab" aria-selected={view === "list"} className={view === "list" ? "active" : ""} onClick={() => setView("list")}>목록</button>
+        <button type="button" role="tab" aria-selected={view === "calendar"} className={view === "calendar" ? "active" : ""} onClick={() => setView("calendar")}>달력</button>
+      </div>
+      <div className="recommendations-grid">
       {/* LEFT */}
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {view === "calendar" && meeting ? (
+          <>
+            <RecommendationCalendar meeting={meeting} recs={recs} selected={selected} onSelect={setSelected} />
+            <div className="card recommendation-primary-action" style={{ padding: 16 }}>
+              <div className="t-cap" style={{ color: "var(--color-primary)", fontWeight: 800 }}>{rec.rank}순위 선택</div>
+              <div style={{ fontSize: 15, fontWeight: 800, margin: "4px 0 12px" }}>
+                {formatInTimeZone(rec.startAt, TZ, "M.d (EEE)", { locale: ko })} {fmtTime(rec.startAt)} – {fmtTime(rec.endAt)}
+              </div>
+              <Button block primary disabled={confirming} onClick={handleConfirmRecommendation}>
+                {confirming ? "확정 중…" : "이 시간으로 확정"}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
         {/* 히어로 카드 */}
         <div className="card emphasis" style={{ position: "relative", display: "flex", gap: 28, padding: 32 }}>
           <span style={{
@@ -843,6 +945,11 @@ function RecommendationsTab({
                   필수 참석자 일부 참여 불가
                 </span>
               )}
+            </div>
+            <div className="recommendation-primary-action" style={{ marginTop: 16 }}>
+              <Button block primary disabled={confirming} onClick={handleConfirmRecommendation}>
+                {confirming ? "확정 중…" : "이 시간으로 확정"}
+              </Button>
             </div>
           </div>
         </div>
@@ -901,11 +1008,20 @@ function RecommendationsTab({
             ))}
           </div>
         </div>
+          </>
+        )}
+
+        {view === "calendar" && voteDetails && (
+          <div className="card tight" style={{ padding: 20 }}>
+            <h3 className="t-h3">{rec.rank}순위 참여자</h3>
+            <ParticipantStatusDetails statuses={recommendationStatuses} details={voteDetails} />
+          </div>
+        )}
       </div>
 
       {/* RIGHT — 확정 패널 */}
       <aside style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <div className="card tight" style={{ padding: 22, position: "relative", overflow: "hidden" }}>
+        <div className="card tight recommendation-confirm-panel" style={{ padding: 22, position: "relative", overflow: "hidden" }}>
           <span style={{ position: "absolute", left: 0, top: 18, bottom: 18, width: 3, borderRadius: 3, background: "var(--color-primary)" }} aria-hidden="true" />
           <div className="t-cap" style={{ fontWeight: 800, color: "var(--color-primary)", textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>이 시간으로</div>
           <h3 style={{ margin: "4px 0 2px", fontSize: 20, fontWeight: 800, letterSpacing: "-0.025em" }}>
@@ -917,18 +1033,7 @@ function RecommendationsTab({
             block primary
             disabled={confirming}
             leftIcon={<Check size={18} color="#fff" stroke={2.5} />}
-            onClick={async () => {
-              setConfirming(true);
-              setConfirmError(null);
-              try {
-                await confirmMeeting(meetingId, rec.recommendationId);
-                onConfirmed();
-                router.push(`/meetings/${meetingId}/confirmed`);
-              } catch (e) {
-                setConfirmError(e instanceof ApiError ? e.message : "확정 중 오류가 생겼어요.");
-                setConfirming(false);
-              }
-            }}
+            onClick={handleConfirmRecommendation}
           >
             {confirming ? "확정 중…" : "이 시간으로 확정"}
           </Button>
@@ -940,6 +1045,8 @@ function RecommendationsTab({
           onParticipantsChanged={onParticipantsChanged}
         />
       </aside>
+      </div>
+
     </div>
   );
 }
@@ -950,8 +1057,9 @@ function RecommendationsTab({
 export default function DashboardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const mid = Number(id);
-  const [tab, setTab] = useState<Tab>("aggregate");
+  const [tab, setTab] = useState<Tab>(() => searchParams.get("tab") === "recommendations" ? "recommendations" : "aggregate");
   const [meeting, setMeeting] = useState<MeetingDetail | null>(null);
   const [meetingError, setMeetingError] = useState<string | null>(null);
   const [recs, setRecs] = useState<ApiRec[] | null>(null);
@@ -1030,7 +1138,7 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
     <div style={{ minHeight: "100dvh", background: "var(--color-bg)" }}>
       <AppHeader />
 
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 32px 96px" }}>
+      <main className="dashboard-main" style={{ maxWidth: 1200, margin: "0 auto", padding: "28px 32px 96px" }}>
         {meetingError && (
           <div role="alert" className="card" style={{ textAlign: "center", marginBottom: 18 }}>
             <p className="t-body2" style={{ marginBottom: 12 }}>{meetingError}</p>
@@ -1038,7 +1146,7 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
           </div>
         )}
         {/* 브레드크럼 */}
-        <div style={{ fontSize: 13, color: "var(--color-text-2)", letterSpacing: "-0.01em", marginBottom: 18 }}>
+        <div className="dashboard-breadcrumb" style={{ fontSize: 13, color: "var(--color-text-2)", letterSpacing: "-0.01em", marginBottom: 18 }}>
           <Link href="/meetings" style={{ color: "var(--color-text-muted)", textDecoration: "none" }}>내 모임</Link>
           <span style={{ margin: "0 6px", color: "var(--color-text-muted)" }}>›</span>
           <span style={{ color: "var(--color-text)", fontWeight: 700 }}>{meeting?.title ?? "–"}</span>
@@ -1055,6 +1163,7 @@ export default function DashboardPage({ params }: { params: Promise<{ id: string
           : (
               <RecommendationsTab
                 recs={recs}
+                meeting={meeting}
                 meetingId={mid}
                 voteDetails={voteDetails}
                 voteDetailsError={voteDetailsError}

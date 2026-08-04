@@ -13,10 +13,9 @@ interface MeetingCardProps {
 
 function resolveHref(meeting: Meeting): string {
   if (meeting.status === "CONFIRMED") return `/meetings/${meeting.id}/confirmed`;
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-  if (!isMobile) return `/meetings/${meeting.id}/dashboard`;
-  if (meeting.status === "READY_TO_CONFIRM") return `/meetings/${meeting.id}/recommendations`;
-  return `/meetings/${meeting.id}/status`;
+  return meeting.status === "READY_TO_CONFIRM"
+    ? `/meetings/${meeting.id}/dashboard?tab=recommendations`
+    : `/meetings/${meeting.id}/dashboard`;
 }
 
 export function MeetingCard({ meeting, interactive = true }: MeetingCardProps) {
