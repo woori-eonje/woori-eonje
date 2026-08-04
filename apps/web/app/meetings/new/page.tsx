@@ -191,10 +191,7 @@ export default function WizardPage() {
   const set = (patch: Partial<WizardData>) => setData((d) => ({ ...d, ...patch }));
 
   const meetingHref = () => {
-    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-    return isMobile
-      ? `/meetings/${meetingId}/status`
-      : `/meetings/${meetingId}/dashboard`;
+    return `/meetings/${meetingId}/dashboard`;
   };
 
   const handleNext = async () => {

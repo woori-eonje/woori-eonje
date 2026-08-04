@@ -11,11 +11,11 @@ import { ApiError } from "@/lib/api";
 import { fetchInvite, toInviteVM, type InviteVM } from "@/lib/invite";
 import { loadParticipant, type StoredParticipant } from "@/lib/participant";
 import {
-  fetchSlotWindows,
+  fetchSlots,
   fetchMyPicks,
   submitAvailability,
-  type WindowDayGroup,
-  type WindowItem,
+  type DayGroup,
+  type DaySlot,
 } from "@/lib/availability";
 
 const MODE_LABEL: Record<SlotState, string> = {
@@ -24,20 +24,7 @@ const MODE_LABEL: Record<SlotState, string> = {
   unavail: "불가",
 };
 
-// 한 블록(연속 슬롯 묶음)의 상태: 모든 슬롯이 같은 상태면 그 상태, 아니면 null(미선택/혼합).
-function windowState(
-  slotIds: number[],
-  picks: Record<number, SlotState>,
-): SlotState | null {
-  let s: SlotState | undefined;
-  for (const id of slotIds) {
-    const v = picks[id];
-    if (v === undefined) return null;
-    if (s === undefined) s = v;
-    else if (s !== v) return null;
-  }
-  return s ?? null;
-}
+type CopyScope = "copy-all" | "copy-weekdays" | "copy-weekends";
 
 export default function TimeSelectPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -45,9 +32,10 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
 
   const [vm, setVm] = useState<InviteVM | null>(null);
   const [participant, setParticipant] = useState<StoredParticipant | null>(null);
-  const [days, setDays] = useState<WindowDayGroup[]>([]);
+  const [days, setDays] = useState<DayGroup[]>([]);
   const [activeDate, setActiveDate] = useState<string>("");
   const [mode, setMode] = useState<SlotState>("available");
+  const [copyScope, setCopyScope] = useState<CopyScope>("copy-all");
   const [picks, setPicks] = useState<Record<number, SlotState>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -72,9 +60,14 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
     setLoading(true);
     setError(null);
     try {
-      const invite = toInviteVM(await fetchInvite(token));
+      const inviteDto = await fetchInvite(token);
+      if (inviteDto.status === "CONFIRMED") {
+        router.replace(`/invite/${token}`);
+        return;
+      }
+      const invite = toInviteVM(inviteDto);
       const [dayGroups, myPicks] = await Promise.all([
-        fetchSlotWindows(invite.meetingId),
+        fetchSlots(invite.meetingId),
         fetchMyPicks(invite.meetingId, p.editToken),
       ]);
       setParticipant(p);
@@ -101,12 +94,12 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
     void load();
   }, [load]);
 
-  // 선택 단위는 블록(window) — 블록 상태(uniform)별로 집계.
+  // 참여자는 1시간 슬롯 단위로 응답하고, 백엔드가 소요시간만큼 연속 가능한 구간을 계산한다.
   const summary = useMemo(() => {
     let ok = 0, m = 0, x = 0;
     for (const d of days) {
-      for (const w of d.windows) {
-        const s = windowState(w.slotIds, picks);
+      for (const slot of d.slots) {
+        const s = picks[slot.slotId];
         if (s === "available") ok++;
         else if (s === "maybe") m++;
         else if (s === "unavail") x++;
@@ -116,13 +109,14 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
   }, [days, picks]);
 
   const activeDay = days.find((d) => d.dateKey === activeDate);
+  const activeDayHasPicks = activeDay?.slots.some((slot) => picks[slot.slotId] !== undefined) ?? false;
 
   const dayCounts = (dateKey: string) => {
     const d = days.find((g) => g.dateKey === dateKey);
     const counts = { available: 0, maybe: 0, unavailable: 0 };
     if (!d) return counts;
-    for (const window of d.windows) {
-      const state = windowState(window.slotIds, picks);
+    for (const slot of d.slots) {
+      const state = picks[slot.slotId];
       if (state === "available") counts.available++;
       else if (state === "maybe") counts.maybe++;
       else if (state === "unavail") counts.unavailable++;
@@ -130,25 +124,19 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
     return counts;
   };
 
-  // 블록 탭: 같은 상태면 해제(슬롯 제거), 아니면 블록의 모든 슬롯을 현재 모드로.
-  const onTapWindow = (w: WindowItem) => {
+  const onTapSlot = (slot: DaySlot) => {
     if (suppressClickRef.current) return;
     setPicks((prev) => {
       const next = { ...prev };
-      if (windowState(w.slotIds, prev) === mode) {
-        for (const id of w.slotIds) delete next[id];
-      } else {
-        for (const id of w.slotIds) next[id] = mode;
-      }
+      if (prev[slot.slotId] === mode) delete next[slot.slotId];
+      else next[slot.slotId] = mode;
       return next;
     });
   };
 
-  const paintWindow = useCallback((w: WindowItem) => {
+  const paintSlot = useCallback((slot: DaySlot) => {
     setPicks((prev) => {
-      const next = { ...prev };
-      for (const id of w.slotIds) next[id] = mode;
-      return next;
+      return { ...prev, [slot.slotId]: mode };
     });
   }, [mode]);
 
@@ -158,7 +146,6 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
     const key = slot?.dataset.windowKey;
     if (!key) return;
 
-    event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -184,15 +171,16 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
 
     if (!drag.dragging) {
       drag.dragging = true;
-      const firstWindow = activeDay?.windows.find((w) => w.key === drag.startKey);
-      if (firstWindow) paintWindow(firstWindow);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      const firstSlot = activeDay?.slots.find((slot) => String(slot.slotId) === drag.startKey);
+      if (firstSlot) paintSlot(firstSlot);
     }
     if (drag.visited.has(key)) return;
 
-    const nextWindow = activeDay?.windows.find((w) => w.key === key);
-    if (!nextWindow) return;
+    const nextSlot = activeDay?.slots.find((slot) => String(slot.slotId) === key);
+    if (!nextSlot) return;
     drag.visited.add(key);
-    paintWindow(nextWindow);
+    paintSlot(nextSlot);
   };
 
   const onDragEnd = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -222,20 +210,35 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
     dragRef.current = null;
   };
 
-  const onQuick = (kind: "reset" | "clear-day" | "fill-day" | "fill-all") => {
+  const onQuick = (
+    kind: "reset" | "clear-day" | "fill-day" | CopyScope,
+  ) => {
     setPicks((prev) => {
       if (kind === "reset") return {};
       const next = { ...prev };
       if (kind === "clear-day") {
-        activeDay?.windows.forEach((w) => w.slotIds.forEach((id) => delete next[id]));
+        activeDay?.slots.forEach((slot) => delete next[slot.slotId]);
         return next;
       }
-      const targetDays = kind === "fill-day"
-        ? days.filter((d) => d.dateKey === activeDate)
-        : days;
-      targetDays.forEach((d) =>
-        d.windows.forEach((w) => w.slotIds.forEach((id) => (next[id] = mode))),
-      );
+      if (kind.startsWith("copy-")) {
+        const pattern = new Map(
+          activeDay?.slots.map((slot) => [slot.timeLabel, prev[slot.slotId]]) ?? [],
+        );
+        days
+          .filter((day) => {
+            if (day.dateKey === activeDate) return false;
+            if (kind === "copy-weekdays") return !day.weekend;
+            if (kind === "copy-weekends") return day.weekend;
+            return true;
+          })
+          .forEach((day) => day.slots.forEach((slot) => {
+            const state = pattern.get(slot.timeLabel);
+            if (state) next[slot.slotId] = state;
+            else delete next[slot.slotId];
+          }));
+        return next;
+      }
+      activeDay?.slots.forEach((slot) => (next[slot.slotId] = mode));
       return next;
     });
   };
@@ -353,23 +356,62 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
       ) : (
         <div className="scroll" style={{ padding: "16px 20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div className="t-cap">상태를 고른 뒤 누르거나 여러 시간을 쓸어 선택하세요. (소요 {vm.durationLabel} 단위)</div>
+            <div className="t-cap">상태를 고른 뒤 1시간씩 누르거나 여러 시간을 쓸어 선택하세요. (모임 소요 {vm.durationLabel})</div>
             <ModeToggle value={mode} onChange={setMode} />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("fill-day")}>
-              이 날짜 전체 {MODE_LABEL[mode]}
-            </button>
-            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("fill-all")}>
-              모든 날짜 전체 {MODE_LABEL[mode]}
-            </button>
-            <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("clear-day")}>
-              이 날짜 선택 지우기
-            </button>
-            <button className="chip danger" style={{ justifyContent: "center" }} onClick={() => onQuick("reset")}>
-              전체 초기화
-            </button>
+          <div style={{
+            display: "flex", flexDirection: "column", gap: 12,
+            padding: 14, borderRadius: 16,
+            background: "var(--color-surface)", border: "1px solid var(--color-line)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div className="t-body2" style={{ fontWeight: 800 }}>빠른 설정</div>
+                <div className="t-cap">현재 날짜를 먼저 완성한 뒤 다른 날짜에 복사하세요.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onQuick("reset")}
+                style={{
+                  flexShrink: 0, border: 0, background: "transparent", padding: "6px 0",
+                  color: "var(--color-error)", font: "inherit", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                }}
+              >
+                전체 초기화
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("fill-day")}>
+                전체 {MODE_LABEL[mode]}
+              </button>
+              <button className="chip" style={{ justifyContent: "center" }} onClick={() => onQuick("clear-day")}>
+                현재 날짜 지우기
+              </button>
+            </div>
+
+            <div style={{ height: 1, background: "var(--color-line)" }} />
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              <label htmlFor="copy-scope" className="t-cap" style={{ fontWeight: 700 }}>현재 날짜 선택 일괄 적용</label>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8 }}>
+                <select
+                  id="copy-scope"
+                  className="input"
+                  value={copyScope}
+                  onChange={(event) => setCopyScope(event.target.value as CopyScope)}
+                  style={{ minWidth: 0 }}
+                >
+                  <option value="copy-all">모든 날짜에</option>
+                  <option value="copy-weekdays">평일에만</option>
+                  <option value="copy-weekends">주말에만</option>
+                </select>
+                <button className="chip" style={{ justifyContent: "center", paddingInline: 18, height: 48, borderRadius: "var(--radius-md)" }} onClick={() => onQuick(copyScope)} disabled={!activeDayHasPicks}>
+                  적용
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="divider" />
@@ -384,13 +426,13 @@ export default function TimeSelectPage({ params }: { params: Promise<{ token: st
             onDragStart={(event) => event.preventDefault()}
             style={{ touchAction: "pan-y" }}
           >
-            {activeDay?.windows.map((w) => (
+            {activeDay?.slots.map((slot) => (
               <TimeSlot
-                key={w.key}
-                windowKey={w.key}
-                time={w.label}
-                state={windowState(w.slotIds, picks)}
-                onTap={() => onTapWindow(w)}
+                key={slot.slotId}
+                windowKey={String(slot.slotId)}
+                time={slot.timeLabel}
+                state={picks[slot.slotId] ?? null}
+                onTap={() => onTapSlot(slot)}
               />
             ))}
           </div>

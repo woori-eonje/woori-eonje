@@ -32,6 +32,10 @@ export default function SubmittedPage({ params }: { params: Promise<{ token: str
     }
     fetchInvite(token)
       .then(async (dto) => {
+        if (dto.status === "CONFIRMED") {
+          router.replace(`/invite/${token}`);
+          return;
+        }
         setVm(toInviteVM(dto));
         setResponseDeadline(dto.responseDeadline);
         const myPicks = await fetchMyPicks(dto.meetingId, participant.editToken);
